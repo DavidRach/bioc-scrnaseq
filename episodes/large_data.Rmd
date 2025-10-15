@@ -84,7 +84,7 @@ counts(sce.brain)
 
 object.size(counts(sce.brain))
 
-file.info(path(counts(sce.brain)))$size
+file.size(path(counts(sce.brain)))
 ```
 
 Manipulation of the count matrix will generally result in the creation of a
@@ -156,7 +156,7 @@ In this example, we find the square root of a vector of numbers in parallel
 by indicating the `BPPARAM` argument in `bplapply`.
 
 ```{r}
-param <- MulticoreParam(workers = 1)
+param <- MulticoreParam(workers = 2)
 
 bplapply(
     X = c(4, 9, 16, 25),
@@ -294,22 +294,20 @@ rand <- pairwiseRand(colLabels(sce), clusters, mode = "index")
 stopifnot(rand > 0.8)
 ```
 
-Note that Annoy writes the NN index to disk prior to performing the search.
-Thus, it may not actually be faster than the default exact algorithm for small
-datasets, depending on whether the overhead of disk write is offset by the
-computational complexity of the search.
-It is also not difficult to find situations where the approximation deteriorates,
-especially at high dimensions, though this may not have an appreciable impact on
-the biological conclusions.
+Note that Annoy writes the NN index to disk prior to
+performing the search. Thus, it may not actually be faster
+than the default exact algorithm for small datasets,
+depending on whether the overhead of disk write is offset by
+the computational complexity of the search. It is also not
+difficult to find situations where the approximation
+deteriorates, especially when the number of features exceeds
+the number of data points, though this may not have an
+appreciable impact on the biological conclusions.
 
 ```{r bad-approx}
 set.seed(1000)
 
-y1 <- matrix(rnorm(50000), nrow = 1000)
-
-y2 <- matrix(rnorm(50000), nrow = 1000)
-
-Y <- rbind(y1, y2)
+Y <- matrix(rnorm(3000*1000), ncol = 1000)
 
 exact <- findKNN(Y, k = 20)
 
@@ -317,6 +315,10 @@ approx <- findKNN(Y, k = 20, BNPARAM = AnnoyParam())
 
 mean(exact$index != approx$index)
 ```
+
+You can see that in this contrived 1000-dimensional dataset, the approximate method didn't frequently get the same result as the exact method.
+
+<!-- TODO: contrive a better example. They usually have close to the same neighbor sets, just in a different order -->
 
 ### Singular value decomposition 
 
