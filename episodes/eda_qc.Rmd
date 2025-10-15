@@ -136,7 +136,7 @@ sce <- sce[,which(e.out$FDR <= 0.001)]
 sce
 ```
 
-The result confirms our expectation: only 3,131 droplets contain a cell, while the large majority of droplets are empty.
+The result confirms our expectation: only `r ncol(sce)` droplets contain a cell, while the large majority of droplets are empty.
 
 ::::::::: spoiler
 
@@ -232,7 +232,7 @@ reasons_strict <- perCellQCFilters(df, sub.fields = "subsets_Mito_percent", nmad
 ```
 
 You would then need to reassign the `discard` column as well, but we'll stick with the 3 MADs default for now.
-<!-- This is a direct application of what was just shown -->
+
 :::
 
 ::::
@@ -329,7 +329,8 @@ ggplot(sf_df, aes(size_factor, deconv_sf)) +
     geom_abline() + 
     geom_point(aes(color = clust)) +
     scale_x_log10() + 
-    scale_y_log10()
+    scale_y_log10() + 
+    labs(x = "library_sf")
 
 ```
 
