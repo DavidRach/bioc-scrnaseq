@@ -43,7 +43,7 @@ In particular, the package contains the following samples that we will use for t
 
 We start our analysis by selecting only sample 5, which contains the injected cells in one biological replicate. We download the "raw" data that contains all the droplets for which we have sequenced reads.
 
-```{r, message = FALSE}
+```{r setup, message = FALSE}
 library(MouseGastrulationData)
 library(DropletUtils)
 library(ggplot2)
@@ -60,6 +60,8 @@ sce <- WTChimeraData(samples = 5, type = "raw")
 ```
 
 This is the same data we examined in the previous lesson. 
+
+We'll be proceeding through the standard EDA and QC steps one by one, but most of these are wrapped together in the helper function `analyze.se()` which performs all the most common steps in one command.
 
 ## Droplet processing
 
@@ -310,83 +312,15 @@ ggplot(sf_df, aes(size_factor)) +
     scale_x_log10()
 ```
 
-
-### Normalization by deconvolution
-
-Library size normalization is not optimal, as it assumes that the total sum of UMI counts differ between cells only for technical and not biological reasons. This can be a problem if a highly-expressed subset of genes is differentially expressed between cells or cell types.
-
-Several robust normalization methods have been proposed for bulk RNA-seq. However, these methods may underperform in single-cell data due to the dominance of low and zero counts. 
-To overcome this, one solution is to _pool_ counts from many cells to increase the size of the counts for accurate size factor estimation[^3]. Pool-based size factors are then _deconvolved_ into cell-based factors for normalization of each cell's expression profile.
-
-We use a pre-clustering step: cells in each cluster are normalized separately and the size factors are rescaled to be comparable across clusters. This avoids the assumption that most genes are non-DE across the entire population -- only a non-DE majority is required between pairs of clusters, which is a weaker assumption for highly heterogeneous populations.
-
-Note that while we focus on normalization by deconvolution here, many other methods have been proposed and lead to similar performance (see [Borella 2022](learners/reference.md#litref) for a comparative review).
+Now we can use the size factors to normalize the counts:
 
 ```{r}
-set.seed(100)
-
-clust <- quickCluster(sce) 
-
-table(clust)
+(sce <- normalizeRnaCounts.se(sce, size.factors = lib.sf))
 ```
 
-```{r}
-deconv.sf <- pooledSizeFactors(sce, cluster = clust)
+There are more thoughtful ways to estimate cell-wise normalization factors (see `scuttle::pooledSizeFactors()`), but the broader single cell field has more or less decided to ignore normalization bias and use library size factors with a "meh, good enough" attitude. A statistically rigorous handling of this detail would require integrating over the uncertainty in the normalizing factor ([as is sometimes done for microbiome data](https://doi.org/10.1186/s13059-025-03609-3)), which is generally regarded as too inexpedient for single-cell data. 
 
-summary(deconv.sf)
-
-sf_df$deconv_sf <- deconv.sf
-
-sf_df$clust <- clust
-
-ggplot(sf_df, aes(size_factor, deconv_sf)) + 
-    geom_abline() + 
-    geom_point(aes(color = clust)) +
-    scale_x_log10() + 
-    scale_y_log10() + 
-    labs(x = "library_sf")
-
-```
-
-Once we have computed the size factors, we compute the normalized expression values for each cell by dividing the count for each gene with the appropriate size factor for that cell. Since we are typically going to work with log-transformed counts, the function `logNormCounts` also log-transforms the normalized values, creating a new assay called `logcounts`.
-
-```{r}
-sizeFactors(sce) <- deconv.sf
-
-sce <- logNormCounts(sce)
-
-sce
-```
-
-:::: challenge
-
-Fill in the blanks for normalization that uses simpler library size factors instead of deconvolution.
-
-```{r eval=FALSE}
-____ <- ____SizeFactors(sce)
-
-sizeFactors(sce) <- ____
-
-sce <- ____(sce)
-
-sce
-```
-
-::: solution
-```{r eval=FALSE}
-lib.sf <- librarySizeFactors(sce)
-
-sizeFactors(sce) <- lib.sf
-
-sce <- logNormCounts(sce)
-
-sce
-```
-
-If you run this chunk, make sure to go back and re-run the normalization with deconvolution normalization if you want your work to align with the rest of this episode.
-:::
-
-::::
+<!-- TODO: add a new challenge here to replace the old one -->
 
 ## Feature Selection
 
@@ -401,17 +335,13 @@ The simplest approach to feature selection is to select the most variable genes 
 Calculation of the per-gene variance is simple but feature selection requires modeling of the mean-variance relationship. The log-transformation is not a variance stabilizing transformation in most cases, which means that the total variance of a gene is driven more by its abundance than its underlying biological heterogeneity. To account for this, the `modelGeneVar` function fits a trend to the variance with respect to abundance across all genes.
 
 ```{r}
-dec.sce <- modelGeneVar(sce)
+stats_df <- modelGeneVariances(logcounts(sce))$statistics
 
-fit.sce <- metadata(dec.sce)
-
-mean_var_df <- data.frame(mean = fit.sce$mean,
-                          var  = fit.sce$var)
-
-ggplot(mean_var_df, aes(mean, var)) + 
-    geom_point() + 
-    geom_function(fun = fit.sce$trend, 
-                  color = "dodgerblue") + 
+ggplot(stats_df, aes(means, variances)) + 
+  geom_point(pch = 15, size = .4) + 
+  geom_point(aes(y = fitted),
+             color = "dodgerblue",
+             size = .3) + 
     labs(x = "Mean of log-expression",
          y = "Variance of log-expression")
 
@@ -424,23 +354,26 @@ The blue line represents the uninteresting "technical" variance for any given ge
 The next step is to select the subset of HVGs to use in downstream analyses. A larger set will assure that we do not remove important genes, at the cost of potentially increasing noise. Typically, we restrict ourselves to the top $n$ genes, here we chose $n = 1000$, but this choice should be guided by prior biological knowledge; for instance, we may expect that only about 10% of genes to be differentially expressed across our cell populations and hence select 10% of genes as highly variable (e.g., by setting `prop = 0.1`).
 
 ```{r}
-hvg.sce.var <- getTopHVGs(dec.sce, n = 1000)
+sce <- chooseRnaHvgs.se(sce, top = 1000) 
+# this calls modelGeneVariances internally
 
-head(hvg.sce.var)
+rowData(sce) |> head()
 ```
 
 :::: challenge
+
+<!-- TODO: update this challenge to chooseRnaHvgs.se -->
 
 Imagine you have data that were prepared by three people with varying level of experience, which leads to varying technical noise. How can you account for this blocking structure when selecting HVGs?
 
 ::: hint
 
-`modelGeneVar()` can take a `block` argument. 
+`modelGeneVariances()` can take a `block` argument. 
 
 :::
 
 ::: solution
-Use the `block` argument in the call to `modelGeneVar()` like so. We don't have experimenter information in this dataset, so in order to have some names to work with we assign them randomly from a set of names.
+Use the `block` argument in the call to `modelGeneVariances()` like so. We don't have experimenter information in this dataset, so in order to have some names to work with we assign them randomly from a set of names.
 
 ```{r eval=FALSE}
 
@@ -448,13 +381,12 @@ sce$experimenter = factor(sample(c("Perry", "Merry", "Gary"),
                           replace = TRUE, 
                           size = ncol(sce)))
 
-blocked_variance_df = modelGeneVar(sce, 
-                                   block = sce$experimenter)
+(blocked_variance_df = modelGeneVariances(logcounts(sce), 
+                                         block = sce$experimenter))
 
 ```
 
-Blocked models are evaluated on each block separately then combined. If the experimental groups are related in some structured way, it may be preferable to use the `design` argument. See `?modelGeneVar` for more detail.
-
+Blocked models are evaluated on each block separately then combined. 
 :::
 
 :::
@@ -639,7 +571,7 @@ Here we used the deconvolution method implemented in `scran` based on a previous
 
 ::: solution
 
-```{r}
+```{r deconv_ex}
 deconv.sf2 <- pooledSizeFactors(sce) # dropped `cluster = clust` here
 
 summary(deconv.sf2)
