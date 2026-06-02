@@ -20,8 +20,8 @@ install.packages(c("BiocManager", "remotes"))
 BiocManager::install(c("AUCell", "batchelor", "BiocStyle", 
                        "CuratedAtlasQueryR", "DropletUtils", "duckdb",
                        "EnsDb.Mmusculus.v79", "MouseGastrulationData",
-                       "scDblFinder", "Seurat", "scrapper", "lgeistlinger/SeuratData",
-                       "SingleR", "TENxBrainData", "zellkonverter"),
+                       "scDblFinder", "scrapper",  "SingleR", 
+                       "TENxBrainData", "zellkonverter"),
                        Ncpus = 4)
 ```
 

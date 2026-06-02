@@ -417,10 +417,6 @@ and to integrate diverse types of single-cell data. Seurat is developed and
 maintained by the [Satija lab](https://satijalab.org/seurat/authors.html)
 and is released under the [MIT license](https://opensource.org/license/mit/).
 
-```{r load-seurat, message = FALSE}
-library(Seurat)
-```
-
 Although the basic processing of single-cell data with Bioconductor packages
 (described in the [OSCA book](https://bioconductor.org/books/release/OSCA/)) and
 with Seurat is very similar and will produce overall roughly identical results,
@@ -432,65 +428,8 @@ vignette](https://satijalab.org/seurat/articles/conversion_vignette.html) for
 conversion to/from other popular single cell formats such as the AnnData format
 used by [scanpy](https://scanpy.readthedocs.io/en/stable/).
 
-Here, we demonstrate converting the Seurat object produced in Seurat's
-[PBMC tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html)
-to a `SingleCellExperiment` for further analysis with functionality from
-OSCA/Bioconductor.
-We therefore need to first install the 
-[SeuratData](https://github.com/satijalab/seurat-data) package, which is available
-from GitHub only. 
-
-```{r, eval = FALSE}
-BiocManager::install("satijalab/seurat-data")
-```
-
-We then proceed by loading all required packages and installing the PBMC dataset:
-
-```{r seurat-data, eval = FALSE}
-library(SeuratData)
-
-InstallData("pbmc3k")
-```
-
-We then load the dataset as an `SeuratObject` and convert it to a 
-`SingleCellExperiment`.
-
-```{r seurat_singlecell, eval = FALSE}
-# Use PBMC3K from SeuratData
-pbmc <- LoadData(ds = "pbmc3k", type = "pbmc3k.final")
-
-pbmc <- UpdateSeuratObject(pbmc)
-
-pbmc
-
-pbmc.sce <- as.SingleCellExperiment(pbmc)
-
-pbmc.sce
-```
-
-Seurat also allows conversion from `SingleCellExperiment` objects to Seurat objects; 
-we demonstrate this here on the wild-type chimera mouse gastrulation dataset. 
-
-```{r sce2sobj, message = FALSE, eval = FALSE}
-sce <- WTChimeraData(samples = 5, type = "processed")
-
-assay(sce) <- as.matrix(assay(sce))
-
-sce <- logNormCounts(sce)
-
-sce
-```
-
-After some processing of the dataset, the actual conversion is carried out with
-the `as.Seurat` function.
-
-```{r, warning = FALSE, eval = FALSE}
-sobj <- as.Seurat(sce)
-
-Idents(sobj) <- "celltype.mapped"
-
-sobj
-```
+Seurat provides helper functions `as.SingleCellExperiment()` and `as.Seurat()`
+to convert back and forth between SCEs and Seurat objects.
 
 ### Scanpy
 
