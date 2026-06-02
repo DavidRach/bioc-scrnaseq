@@ -51,13 +51,12 @@ library(EnsDb.Mmusculus.v79)
 library(scuttle)
 library(scater)
 library(scran)
+library(scrapper)
 library(scDblFinder)
 
 sce <- WTChimeraData(samples = 5, type = "raw")
 
-sce <- sce[[1]]
-
-sce
+(sce <- sce[[1]])
 ```
 
 This is the same data we examined in the previous lesson. 
@@ -131,9 +130,7 @@ e.out <- emptyDrops(counts(sce))
 
 summary(e.out$FDR <= 0.001)
 
-sce <- sce[,which(e.out$FDR <= 0.001)]
-
-sce
+(sce <- sce[,which(e.out$FDR <= 0.001)])
 ```
 
 The result confirms our expectation: only `r ncol(sce)` droplets contain a cell, while the large majority of droplets are empty.
@@ -184,40 +181,37 @@ chr.loc <- mapIds(EnsDb.Mmusculus.v79,
 is.mito <- which(chr.loc == "MT")
 ```
 
-We can use the `scuttle` package to compute a set of quality control metrics, specifying that we want to use the mitochondrial genes as a special set of features.
+We can use the `scrapper` package to compute a set of quality control metrics, specifying that we want to use the mitochondrial genes as a special set of features.
 
 ```{r}
-df <- perCellQCMetrics(sce, subsets = list(Mito = is.mito))
+qc_df <- computeRnaQcMetrics(counts(sce), 
+                          subsets = list(mito = is.mito))
 
-colData(sce) <- cbind(colData(sce), df)
-
-colData(sce)
+(colData(sce) <- cbind(colData(sce), qc_df))
 ```
 
 Now that we have computed the metrics, we have to decide on thresholds to define high- and low-quality samples. We could check how many cells are above/below a certain fixed threshold. For instance,
 
 ```{r}
-table(df$sum < 10000)
+table(qc_df$sum < 1e4)
 
-table(df$subsets_Mito_percent > 10)
+table(qc_df$subsets$mito > .10)
 ```
 
 or we could look at the distribution of such metrics and use a data adaptive threshold.
 
 ```{r}
-summary(df$detected)
+summary(qc_df$detected)
 
-summary(df$subsets_Mito_percent)
+summary(qc_df$subsets$mito)
 ```
 
 We can use the `perCellQCFilters` function to apply a set of common adaptive filters to identify low-quality cells. By default, we consider a value to be an outlier if it is more than 3 median absolute deviations (MADs) from the median in the "problematic" direction. This is loosely motivated by the fact that such a filter will retain 99% of non-outlier values that follow a normal distribution.
 
 ```{r}
-reasons <- perCellQCFilters(df, sub.fields = "subsets_Mito_percent")
+(thresh <- suggestRnaQcThresholds(qc_df))
 
-reasons
-
-sce$discard <- reasons$discard
+sce$keep = filterRnaQcMetrics(thresh, qc_df)
 ```
 
 :::: challenge
@@ -228,10 +222,10 @@ Maybe our sample preparation was poor and we want the QC to be more strict. How 
 You set `nmads = 2.5` like so:
 
 ```{r}
-reasons_strict <- perCellQCFilters(df, sub.fields = "subsets_Mito_percent", nmads = 2.5)
+thresh_strict <- suggestRnaQcThresholds(qc_df, num.mads = 2.5)
 ```
 
-You would then need to reassign the `discard` column as well, but we'll stick with the 3 MADs default for now.
+You would then need to reassign the `keep` column as well, but we'll stick with the 3 MADs default for now.
 
 :::
 
@@ -247,13 +241,13 @@ Moreover, if there are too many discarded cells, further exploration might be
 needed.
 
 ```{r}
-plotColData(sce, y = "sum", colour_by = "discard") +
+plotColData(sce, y = "sum", colour_by = "keep") +
     labs(title = "Total count")
 
-plotColData(sce, y = "detected", colour_by = "discard") + 
+plotColData(sce, y = "detected", colour_by = "keep") + 
     labs(title = "Detected features")
 
-plotColData(sce, y = "subsets_Mito_percent", colour_by = "discard") + 
+plotColData(sce, y = sce$subsets, colour_by = "keep") + 
     labs(title = "Mito percent")
 
 ```
@@ -261,7 +255,7 @@ plotColData(sce, y = "subsets_Mito_percent", colour_by = "discard") +
 While the univariate distribution of QC metrics can give some insight on the quality of the sample, often looking at the bivariate distribution of QC metrics is useful, e.g., to confirm that there are no cells with both large total counts and large mitochondrial counts, to ensure that we are not inadvertently removing high-quality cells that happen to be highly metabolically active.
 
 ```{r}
-plotColData(sce,  x ="sum", y = "subsets_Mito_percent", colour_by = "discard")
+plotColData(sce,  x ="sum", y = sce$subsets, colour_by = "keep")
 ```
 
 It could also be a good idea to perform a differential expression analysis between retained and discarded cells to check wether we are removing an unusual cell population rather than low-quality libraries (see [Section 1.5 of OSCA advanced](https://bioconductor.org/books/release/OSCA.advanced/quality-control-redux.html#qc-discard-cell-types)).
@@ -269,23 +263,43 @@ It could also be a good idea to perform a differential expression analysis betwe
 Once we are happy with the results, we can discard the low-quality cells by subsetting the original object.
 
 ```{r}
-sce <- sce[,!sce$discard]
-sce
+(sce <- sce[,sce$keep])
 ```
 
 ## Normalization
 
-Systematic differences in sequencing coverage between libraries are often observed in single-cell RNA sequencing data. They typically arise from technical differences in cDNA capture or PCR amplification efficiency across cells, attributable to the difficulty of achieving consistent library preparation with minimal starting material[^2]. Normalization aims to remove these differences such that they do not interfere with comparisons of the expression profiles between cells. The hope is that the observed heterogeneity or differential expression within the cell population are driven by biology and not technical biases.
+Systematic differences in sequencing coverage between libraries are often
+observed in single-cell RNA sequencing data. They typically arise from technical
+differences in cDNA capture or PCR amplification efficiency across cells,
+attributable to the difficulty of achieving consistent library preparation with
+minimal starting material[^2]. Normalization aims to remove these differences
+such that they do not interfere with comparisons of the expression profiles
+between cells. The hope is that the observed heterogeneity or differential
+expression within the cell population are driven by biology and not technical
+biases.
 
-We will mostly focus our attention on scaling normalization, which is the simplest and most commonly used class of normalization strategies. This involves dividing all counts for each cell by a cell-specific scaling factor, often called a _size factor_.
-The assumption here is that any cell-specific bias (e.g., in capture or amplification efficiency) affects all genes equally via scaling of the expected mean count for that cell. The size factor for each cell represents the estimate of the relative bias in that cell, so division of its counts by its size factor should remove that bias. The resulting “normalized expression values” can then be used for downstream analyses such as clustering and dimensionality reduction.
+We will mostly focus our attention on scaling normalization, which is the
+simplest and most commonly used class of normalization strategies. This involves
+dividing all counts for each cell by a cell-specific scaling factor, often
+called a _size factor_. The assumption here is that any cell-specific bias
+(e.g., in capture or amplification efficiency) affects all genes equally via
+scaling of the expected mean count for that cell. The size factor for each cell
+represents the estimate of the relative bias in that cell, so division of its
+counts by its size factor should remove that bias. The resulting “normalized
+expression values” can then be used for downstream analyses such as clustering
+and dimensionality reduction.
 
-The simplest and most natural strategy would be to normalize by the total sum of counts across all genes for each cell. This is often called the _library size normalization_.
+The simplest and most natural strategy would be to normalize by the total sum of
+counts across all genes for each cell. This is often called the _library size
+normalization_.
 
-The _library size factor_ for each cell is directly proportional to its library size where the proportionality constant is defined such that the mean size factor across all cells is equal to 1. This ensures that the normalized expression values are on the same scale as the original counts.
+The _library size factor_ for each cell is directly proportional to its library
+size. These size factors are often scaled such that the mean size factor across
+all cells is equal to 1. This ensures that the normalized expression values are
+typically on the same scale as the original counts.
 
 ```{r}
-lib.sf <- librarySizeFactors(sce)
+lib.sf <- centerSizeFactors(sce$sum)
 
 summary(lib.sf)
 
