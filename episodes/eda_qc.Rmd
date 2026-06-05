@@ -213,7 +213,7 @@ We can use the `perCellQCFilters` function to apply a set of common adaptive fil
 ```{r}
 (thresh <- suggestRnaQcThresholds(qc_df))
 
-sce$keep = filterRnaQcMetrics(thresh, qc_df)
+sce$keep <- filterRnaQcMetrics(thresh, qc_df)
 ```
 
 :::: challenge
@@ -351,7 +351,9 @@ The blue line represents the uninteresting "technical" variance for any given ge
 
 ### Selecting highly variable genes
 
-The next step is to select the subset of HVGs to use in downstream analyses. A larger set will assure that we do not remove important genes, at the cost of potentially increasing noise. Typically, we restrict ourselves to the top $n$ genes, here we chose $n = 1000$, but this choice should be guided by prior biological knowledge; for instance, we may expect that only about 10% of genes to be differentially expressed across our cell populations and hence select 10% of genes as highly variable (e.g., by setting `prop = 0.1`).
+The next step is to identify HVGs to use in downstream analyses. A larger set will assure that we do not remove important genes, at the cost of potentially increasing noise. Typically, we restrict ourselves to the top $n$ genes, here we chose $n = 1000$, but this choice should be guided by prior biological knowledge; for instance, we may expect that only about 10% of genes to be differentially expressed across our cell populations and hence select 10% of genes as highly variable.
+
+Here we use `chooseRnaHvgs.se()` to model the variances and add them to a column `hvg` on the SCE in one step:
 
 ```{r}
 sce <- chooseRnaHvgs.se(sce, top = 1000) 
@@ -401,25 +403,28 @@ As the name suggests, dimensionality reduction aims to reduce the number of dime
 
 Principal component analysis (PCA) is a dimensionality reduction technique that provides a parsimonious summarization of the data by replacing the original variables (genes) by fewer linear combinations of these variables, that are orthogonal and have successively maximal variance. Such linear combinations seek to "separate out" the observations (cells), while losing as little information as possible.
 
-Without getting into the technical details, one nice feature of PCA is that the principal components (PCs) are ordered by how much variance of the original data they "explain". Furthermore, by focusing on the top $k$ PC we are focusing on the most important directions of variability, which hopefully correspond to biological rather than technical variance. (It is however good practice to check this by e.g. looking at correlation between technical QC metrics and PCs).
+Without getting into the details, one nice feature of PCA is that the principal components (PCs) are ordered by how much variance of the original data they "explain". Furthermore, by focusing on the top $k$ PC we are focusing on the most important directions of variability, which hopefully correspond to biological rather than technical variance. (It is however good practice to check this by e.g. looking at correlation between technical QC metrics and PCs).
 
-One simple way to maximize our chance of capturing biological variation is by computing the PCs starting from the highly variable genes identified before.
+One simple way to maximize our chance of capturing biological variation is by computing the PCs starting from the highly variable genes identified before. 
 
-```{r}
-sce <- runPCA(sce, subset_row = hvg.sce.var)
-
-sce
+```{r runPca}
+(sce <- runPca.se(sce, features = rowData(sce)$hvg))
 ```
 
-By default, `runPCA` computes the first 50 principal components. We can check how much original variability they explain. These values are stored in the attributes of the `percentVar` reducedDim:
+By default, `runPca.se` computes the first 25 principal components. The metadata on the PCA is added to `metadata(sce)`. The PC embeddings are added to a `reducedDim()`. Let's make a graph of the percent variation explained:
 
 ```{r}
-pct_var_df <- data.frame(PC = 1:50,
-                         pct_var = attr(reducedDim(sce), "percentVar"))
+
+pca_l <- metadata(sce)$PCA
+
+pct_var_df <- data.frame(PC = 1:25,
+                         pct_var = 100 * pca_l$variance.explained / 
+                                         pca_l$total.variance)
 
 ggplot(pct_var_df,
        aes(PC, pct_var)) + 
     geom_point() + 
+    geom_segment(aes(xend = PC, yend = 0)) + 
     labs(y = "Variance explained (%)")
 ```
 
@@ -446,7 +451,7 @@ These methods attempt to find a low-dimensional representation of the data that 
 ```{r}
 set.seed(100)
 
-sce <- runTSNE(sce, dimred = "PCA")
+sce <- runTsne.se(sce)
 
 plotTSNE(sce)
 ```
@@ -454,7 +459,7 @@ plotTSNE(sce)
 ```{r}
 set.seed(111)
 
-sce <- runUMAP(sce, dimred = "PCA")
+sce <- runUmap.se(sce)
 
 plotUMAP(sce)
 ```
@@ -481,13 +486,13 @@ Re-run the UMAP for the same sample starting from the pre-processed data (i.e. n
 ```{r}
 set.seed(111)
 
-sce5 <- WTChimeraData(samples = 5) 
+sce5 <- WTChimeraData(samples = 5) |> 
+  normalizeRnaCounts.se() |> 
+  chooseRnaHvgs.se() 
 
-sce5 <- logNormCounts(sce5)
-
-sce5 <- runPCA(sce5)
-
-sce5 <- runUMAP(sce5)
+sce5 <- sce5 |> 
+  runPca.se(features = rowData(sce5)$hvg) |> 
+  runUmap.se()
 
 plotUMAP(sce5)
 ```
@@ -523,45 +528,54 @@ At a high level, the algorithm can be defined by the following steps:
 
 Intuitively, if a "cell" is surrounded only by simulated doublets is very likely to be a doublet itself.
 
-This approach is implemented below using the `scDblFinder` library. We then visualize the scores in a t-SNE plot.
+This approach is implemented below using the `scDblFinder` library. We then visualize the scores in a t-SNE plot. (Here we use a custom processing function to use `scrapper` to do the normalization, though if this isn't specified scDblFinder will do the same thing with `scater`)
 
 ```{r}
 set.seed(100)
 
-dbl.dens <- computeDoubletDensity(sce, subset.row = hvg.sce.var,
-                                  dims = ncol(reducedDim(sce)))
-summary(dbl.dens)
+scrapper_proc = function(e, dims) {
+    cs = colSums(e) |> 
+      scrapper::centerSizeFactors()
 
-sce$DoubletScore <- dbl.dens
+    norm_cnts = e |>
+      normalizeCounts(size.factors = cs)
+    
+    stat_df = norm_cnts |> 
+      modelGeneVariances()
+    
+    hvgs = stat_df$statistics$variances |> 
+      chooseHighlyVariableGenes(top = 1000)
+    
+    pca_res = norm_cnts |>
+      runPca(number = dims,
+             subset = hvgs)
 
-plotTSNE(sce, colour_by = "DoubletScore")
-```
+    res = pca_res$components |> t()
 
-We can explicitly convert this into doublet calls by identifying large outliers for the score within each sample. Here we use the "griffiths" method to do so.
+    dimnames(res) = list(colnames(e), paste0("PC", 1:dims))
 
-```{r}
-dbl.calls <- doubletThresholding(data.frame(score = dbl.dens),
-                                 method = "griffiths",
-                                 returnType = "call")
-summary(dbl.calls)
+    res
+}
 
-sce$doublet <- dbl.calls
+sce <- scDblFinder(sce, 
+                   processing = scrapper_proc, 
+                   dims = 25)
 
-plotColData(sce, y = "DoubletScore", colour_by = "doublet")
-
-plotTSNE(sce, colour_by = "doublet")
+plotTSNE(sce, colour_by = "scDblFinder.class")
 ```
 
 One way to determine whether a cell is in a real transient state or it is a doublet is to check the number of detected genes and total UMI counts.
 
 ```{r}
-plotColData(sce, "detected", "sum", colour_by = "DoubletScore")
+plotColData(sce, "detected", "sum", colour_by = "scDblFinder.score")
 plotColData(sce, "detected", "sum", colour_by = "doublet")
 ```
 
-In this case, we only have a few doublets at the periphery of some clusters. It could be fine to keep the doublets in the analysis, but it may be safer to discard them to avoid biases in downstream analysis (e.g., differential expression).
+Discarding doublets is generally best in order to avoid biases in downstream analysis (e.g. differential expression).
 
 ## Exercises
+
+<!-- TODO: analyze.se exercise? -->
 
 :::::::::::::::::::::::::::::::::: challenge
 
