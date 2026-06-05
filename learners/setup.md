@@ -15,7 +15,7 @@ the course to explain the following commands. For now, simply start RStudio by
 double-clicking the icon and enter these commands:
 
 ```r
-install.packages(c("BiocManager", "remotes"))
+install.packages(c("BiocManager"))
 
 BiocManager::install(c("AUCell", "batchelor", "BiocStyle", 
                        "CuratedAtlasQueryR", "DropletUtils", "duckdb",
