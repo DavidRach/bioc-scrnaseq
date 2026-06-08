@@ -75,7 +75,7 @@ The main point is: if the sequencing outputs were provided to you by someone els
 
 We can visualize barcode read totals to visualize the distinction between empty droplets and properly profiled single cells in a so-called "knee plot":
 
-```{r}
+```{r knee_plot}
 bcrank <- barcodeRanks(counts(sce))
 
 # Only showing unique points for plotting speed.
@@ -122,7 +122,7 @@ A better approach is to test whether the expression profile for each cell barcod
 
 We call cells at a false discovery rate (FDR) of 0.1%, meaning that no more than 0.1% of our called barcodes should be empty droplets on average.
 
-```{r}
+```{r emptDrops}
 # emptyDrops performs Monte Carlo simulations to compute p-values,
 # so we need to set the seed to obtain reproducible results.
 set.seed(100)
@@ -185,9 +185,9 @@ is.mito <- which(chr.loc == "MT")
 
 We can use the `scrapper` package to compute a set of quality control metrics, specifying that we want to use the mitochondrial genes as a special set of features.
 
-```{r}
+```{r computeRnaQcMetrics}
 qc_df <- computeRnaQcMetrics(counts(sce), 
-                          subsets = list(mito = is.mito))
+                             subsets = list(mito = is.mito))
 
 (colData(sce) <- cbind(colData(sce), qc_df))
 ```
@@ -242,7 +242,7 @@ difference from "regular" cells (e.g., a bimodal distribution or a long tail).
 Moreover, if there are too many discarded cells, further exploration might be
 needed.
 
-```{r}
+```{r plotColData}
 plotColData(sce, y = "sum", colour_by = "keep") +
     labs(title = "Total count")
 
@@ -300,7 +300,7 @@ size. These size factors are often scaled such that the mean size factor across
 all cells is equal to 1. This ensures that the normalized expression values are
 typically on the same scale as the original counts.
 
-```{r}
+```{r centerSizeFactors}
 lib.sf <- centerSizeFactors(sce$sum)
 
 summary(lib.sf)
@@ -314,7 +314,7 @@ ggplot(sf_df, aes(size_factor)) +
 
 Now we can use the size factors to normalize the counts:
 
-```{r}
+```{r normalizeCounts}
 (sce <- normalizeRnaCounts.se(sce, size.factors = lib.sf))
 ```
 
@@ -334,7 +334,7 @@ The simplest approach to feature selection is to select the most variable genes 
 
 Calculation of the per-gene variance is simple but feature selection requires modeling of the mean-variance relationship. The log-transformation is not a variance stabilizing transformation in most cases, which means that the total variance of a gene is driven more by its abundance than its underlying biological heterogeneity. To account for this, the `modelGeneVar` function fits a trend to the variance with respect to abundance across all genes.
 
-```{r}
+```{r modelGeneVariances}
 stats_df <- modelGeneVariances(logcounts(sce))$statistics
 
 ggplot(stats_df, aes(means, variances)) + 
@@ -442,13 +442,28 @@ It can be helpful to compare pairs of PCs. This can be done with the `ncomponent
 plotReducedDim(sce, dimred = "PCA", ncomponents = 3)
 ```
 
+:::: challenge
+
+Plot the first two PCs, coloring cells by `ENSMUSG00000055609`. That's the gene identifier for Hba-x, one of the HVGs.
+
+::: solution
+```{r}
+plotPCA(sce, colour_by = "ENSMUSG00000055609")
+```
+
+:::
+
+::::
+
 ### Non-linear methods
 
 While PCA is a simple and effective way to visualize (and interpret!) scRNA-seq data, non-linear methods such as t-SNE (_t-stochastic neighbor embedding_) and UMAP (_uniform manifold approximation and projection_) have gained much popularity in the literature.
 
 These methods attempt to find a low-dimensional representation of the data that attempt to preserve pair-wise distance and structure in high-dimensional gene space as best as possible.
 
-```{r}
+The commands to fit t-SNE coordinates and plot them are what you would expect:
+
+```{r runTsne}
 set.seed(100)
 
 sce <- runTsne.se(sce)
@@ -456,7 +471,23 @@ sce <- runTsne.se(sce)
 plotTSNE(sce)
 ```
 
+:::: challenge
+
+Plot the TSNE coordinates, coloring cells by another HVG. 
+
+::: solution
 ```{r}
+rowData(sce)[rowData(sce)$hvg,][1:3,] # pick your favorite 
+
+plotTSNE(sce, colour_by = "ENSMUSG00000025902") + 
+  labs(title = "Sox17")
+```
+:::
+::::
+
+Fitting and plotting UMAP coordinates are similar:
+
+```{r runUmap}
 set.seed(111)
 
 sce <- runUmap.se(sce)
@@ -500,7 +531,8 @@ plotUMAP(sce5)
 Given that it's the same cells processed through a very similar pipeline, the
 result should look very similar. There's a slight difference in the total number
 of cells, probably because the official processing pipeline didn't use the exact
-same random seed / QC arguments as us.
+same random seed / QC arguments as us. Note that we also skipped the
+mitochondrial proportion filtering here  too.
 
 But you'll notice that even though the shape of the structures are similar, they look slightly distorted. If the upstream QC parameters change, the downstream output visualizations will also change.
 
@@ -528,7 +560,7 @@ At a high level, the algorithm can be defined by the following steps:
 
 Intuitively, if a "cell" is surrounded only by simulated doublets is very likely to be a doublet itself.
 
-This approach is implemented below using the `scDblFinder` library. We then visualize the scores in a t-SNE plot. (Here we use a custom processing function to use `scrapper` to do the normalization, though if this isn't specified scDblFinder will do the same thing with `scater`)
+This approach is implemented below using the `scDblFinder` library. We then visualize the scores in a t-SNE plot. (Here we use a custom processing function to let `scDblFinder` use `scrapper` to do the normalization, though if this isn't specified scDblFinder will do the same thing with `scater`)
 
 ```{r}
 set.seed(100)
@@ -558,8 +590,7 @@ scrapper_proc = function(e, dims) {
 }
 
 sce <- scDblFinder(sce, 
-                   processing = scrapper_proc, 
-                   dims = 25)
+                   processing = scrapper_proc)
 
 plotTSNE(sce, colour_by = "scDblFinder.class")
 ```
@@ -568,7 +599,8 @@ One way to determine whether a cell is in a real transient state or it is a doub
 
 ```{r}
 plotColData(sce, "detected", "sum", colour_by = "scDblFinder.score")
-plotColData(sce, "detected", "sum", colour_by = "doublet")
+
+plotColData(sce, "detected", "sum", colour_by = "scDblFinder.class")
 ```
 
 Discarding doublets is generally best in order to avoid biases in downstream analysis (e.g. differential expression).
@@ -643,66 +675,23 @@ sce <- read10xCounts(file.path(dirname(local_path), "raw_feature_bc_matrix/"))
 
 ::: solution
 
-After getting the data, the steps are largely copy-pasted from above. For the sake of simplicity the mitochondrial genes are identified by gene symbols in the row data. Otherwise the steps are the same:
+After getting the data and running, we re-do many of the steps above in one step with the aforementioned `analyze.se()` function:
 
 ```{r eval = FALSE}
 e.out <- emptyDrops(counts(sce))
 
 sce <- sce[,which(e.out$FDR <= 0.001)]
 
-# Thankfully the data come with gene symbols, which we can use to identify mitochondrial genes:
-is.mito <- grepl("^MT-", rowData(sce)$Symbol) 
+mito_i <- grep("^MT-", rowData(sce)$Symbol)
 
-# QC metrics ----
-df <- perCellQCMetrics(sce, subsets = list(Mito = is.mito))
+res <- analyze.se(sce,
+                  num.threads = 4,
+                  rna.qc.subsets = list(mito = mito_i))
 
-colData(sce) <- cbind(colData(sce), df)
+sce <- res[[1]]
 
-colData(sce)
-
-reasons <- perCellQCFilters(df, sub.fields = "subsets_Mito_percent")
-
-reasons
-
-sce$discard <- reasons$discard
-
-sce <- sce[,!sce$discard]
-
-# Normalization ----
-clust <- quickCluster(sce) 
-
-table(clust)
-
-deconv.sf <- pooledSizeFactors(sce, cluster = clust)
-
-sizeFactors(sce) <- deconv.sf
-
-sce <- logNormCounts(sce)
-
-# Feature selection ----
-dec.sce <- modelGeneVar(sce)
-
-hvg.sce.var <- getTopHVGs(dec.sce, n = 1000)
-
-# Dimensionality reduction ----
-sce <- runPCA(sce, subset_row = hvg.sce.var)
-
-sce <- runTSNE(sce, dimred = "PCA")
-
-sce <- runUMAP(sce, dimred = "PCA")
-
-# Doublet finding ----
-dbl.dens <- computeDoubletDensity(sce, subset.row = hvg.sce.var,
-                                  d = ncol(reducedDim(sce)))
-
-sce$DoubletScore <- dbl.dens
-
-dbl.calls <- doubletThresholding(data.frame(score = dbl.dens),
-                                 method = "griffiths",
-                                 returnType = "call")
-
-
-sce$doublet <- dbl.calls
+sce <- scDblFinder(sce, 
+                   processing = scrapper_proc)
 
 ```
 
@@ -728,7 +717,7 @@ Spike-ins are deliberately-introduced exogeneous RNA from an exotic or synthetic
 
 #### Extension challenge 2: Background research
 
-Run an internet search for some of the most highly variable genes we identified in the feature selection section. See if you can identify the type of protein they produce or what sort of process they're involved in. Do they make biological sense to you?
+Run an internet search for some of the most highly variable genes we identified in the feature selection section. See if you can identify the type of protein they produce or what sort of process they're involved in. Recall that these samples come from developing mouse embryoes. Do they make biological sense to you? 
 
 ::::
 
