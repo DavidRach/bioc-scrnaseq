@@ -560,37 +560,12 @@ At a high level, the algorithm can be defined by the following steps:
 
 Intuitively, if a "cell" is surrounded only by simulated doublets is very likely to be a doublet itself.
 
-This approach is implemented below using the `scDblFinder` library. We then visualize the scores in a t-SNE plot. (Here we use a custom processing function to let `scDblFinder` use `scrapper` to do the normalization, though if this isn't specified scDblFinder will do the same thing with `scater`)
+This approach is implemented below using the `scDblFinder` library. We then visualize the scores in a t-SNE plot. 
 
 ```{r}
 set.seed(100)
 
-scrapper_proc = function(e, dims) {
-    cs = colSums(e) |> 
-      scrapper::centerSizeFactors()
-
-    norm_cnts = e |>
-      normalizeCounts(size.factors = cs)
-    
-    stat_df = norm_cnts |> 
-      modelGeneVariances()
-    
-    hvgs = stat_df$statistics$variances |> 
-      chooseHighlyVariableGenes(top = 1000)
-    
-    pca_res = norm_cnts |>
-      runPca(number = dims,
-             subset = hvgs)
-
-    res = pca_res$components |> t()
-
-    dimnames(res) = list(colnames(e), paste0("PC", 1:dims))
-
-    res
-}
-
-sce <- scDblFinder(sce, 
-                   processing = scrapper_proc)
+sce <- scDblFinder(sce)
 
 plotTSNE(sce, colour_by = "scDblFinder.class")
 ```
