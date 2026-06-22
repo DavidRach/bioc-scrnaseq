@@ -582,34 +582,37 @@ Discarding doublets is generally best in order to avoid biases in downstream ana
 
 ## Exercises
 
-<!-- TODO: analyze.se exercise? -->
 
 :::::::::::::::::::::::::::::::::: challenge
 
-#### Exercise 1: Normalization
+#### Exercise 1: `analyze.se` 
 
-Here we used the deconvolution method implemented in `scran` based on a previous clustering step. Use the `pooledSizeFactors` to compute the size factors without considering a preliminary clustering. Compare the resulting size factors via a scatter plot. How do the results change? What are the risks of not including clustering information?
+Many of the functions in this lesson are part of a standard pipeline, and hence have 
+been composed into one utility function `analyze.se()`. Read the steps that are and are not covered on the details section of the help page `?analyze.se`, then try running this function on sample 7 from the WTChimeraData. 
+
+::: hint
+`analyze.se()` doesn't do empty droplet detection.
+:::
 
 ::: solution
 
-```{r deconv_ex}
-deconv.sf2 <- pooledSizeFactors(sce) # dropped `cluster = clust` here
+```{r analyze.se_ex}
+sce2 <- WTChimeraData(samples = 7, type = "raw")
 
-summary(deconv.sf2)
+sce2 <- sce2[[1]]
 
-sf_df$deconv_sf2 <- deconv.sf2
+e.out <- emptyDrops(counts(sce2))
 
-sf_df$clust <- clust
+sce2 <- sce2[,which(e.out$FDR <= 0.001)]
 
-ggplot(sf_df, aes(deconv_sf, deconv_sf2)) + 
-    geom_abline() + 
-    geom_point(aes(color = clust)) +
-    scale_x_log10() + 
-    scale_y_log10() + 
-    facet_wrap(vars(clust))
+mito_list <- list(mito = grep("^mt-", rowData(sce2)$SYMBOL))
+
+(res <- analyze.se(sce2, 
+                   rna.qc.subsets = mito_list))
+
 ```
 
-You can see that we get largely similar results, though for clusters 3 and 9 there's a slight deviation from the `y=x` relationship because these clusters (which are fairly distinct from the other clusters) are now being pooled with cells from other clusters. This slightly violates the "majority non-DE genes" assumption.
+You can see it performs all the major steps in one function call. The empty droplet detection step isn't necessary on many modern datasets since it's commonly handled by upstream steps e.g. CellRanger. 
 
 :::
 
@@ -692,7 +695,7 @@ Spike-ins are deliberately-introduced exogeneous RNA from an exotic or synthetic
 
 #### Extension challenge 2: Background research
 
-Run an internet search for some of the most highly variable genes we identified in the feature selection section. See if you can identify the type of protein they produce or what sort of process they're involved in. Recall that these samples come from developing mouse embryoes. Do they make biological sense to you? 
+Run an internet search for some of the most highly variable genes we identified in the feature selection section. See if you can identify the type of protein they produce or what sort of process they're involved in. Recall that these samples come from developing mouse embryoes. Do the genes in question make biological sense to you? 
 
 ::::
 
@@ -703,7 +706,7 @@ Run an internet search for some of the most highly variable genes we identified 
 Can dimensionality reduction techniques provide a perfectly accurate representation of the data?
 
 ::: solution
-Mathematically, this would require the data to fall on a two-dimensional plane (for linear methods like PCA) or a smooth 2D manifold (for methods like UMAP). You can be confident that this will never happen in real-world data, so the reduction from ~2500-dimensional gene space to two-dimensional plot space always involves some degree of information loss.
+No. Mathematically, this would require the data to fall on a two-dimensional plane (for linear methods like PCA) or a smooth 2D manifold (for methods like UMAP). You can be confident that this will never happen in real-world data, so the reduction from ~2500-dimensional gene space to two-dimensional plot space always involves some degree of information loss.
 :::
 
 ::::
