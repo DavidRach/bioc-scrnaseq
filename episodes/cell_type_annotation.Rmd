@@ -292,12 +292,12 @@ ref <- EmbryoAtlasData(samples = 29)
 ref
 ```
 
-In order to reduce the computational load, we subsample the dataset to 1,000 cells.
+In order to reduce the computational load, we subsample the dataset to 2,000 cells.
 
 ```{r}
 set.seed(123)
 
-ind <- sample(ncol(ref), 1000)
+ind <- sample(ncol(ref), 2000)
 
 ref <- ref[,ind]
 ```
@@ -313,7 +313,7 @@ tab
 We need the normalized log counts, so we add those on: 
 
 ```{r ref-preproc}
-ref <- logNormCounts(ref)
+ref <- normalizeRnaCounts.se(ref)
 ```
 
 Some cleaning - remove cells of the reference dataset for which the cell
@@ -325,8 +325,7 @@ nna <- !is.na(ref$celltype)
 ref <- ref[,nna]
 ```
 
-Also remove cell types of very low abundance (here less than 10 cells)
-to remove noise prior to subsequent annotation tasks.
+Also remove very rare cell types (fewer than 10 examples) to avoid allocating cells to a poorly characterized type.
 
 ```{r low-abu-ct}
 abu.ct <- names(tab)[tab >= 10]
@@ -388,9 +387,11 @@ type, indicating that the clustering represents finer subdivisions within these
 cell types.
 
 ```{r, fig.width = 10, fig.height = 10}
-tab <- table(anno = res$pruned.labels, cluster = colLabels(sce))
+tab <- table(anno = res$pruned.labels, 
+             cluster = sce$clusters)
 
-pheatmap(log2(tab + 10), color = colorRampPalette(c("white", "blue"))(101))
+pheatmap(log1p(tab), 
+         color = hcl.colors(100))
 ```
 
 As it so happens, we are in the fortunate position where our test
@@ -402,7 +403,8 @@ experts.
 ```{r anno-vs-preanno, fig.width = 10, fig.height = 10}
 tab <- table(res$pruned.labels, sce$celltype.mapped)
 
-pheatmap(log2(tab + 10), color = colorRampPalette(c("white", "blue"))(101))
+pheatmap(log1p(tab), 
+         color = hcl.colors(100))
 ```
 
 :::: challenge
@@ -418,7 +420,7 @@ sce$SingleR_label = res$pruned.labels
 :::
 ::::
 
-### Assigning cell labels from gene sets
+### Assigning cell labels from marker gene sets
 
 A related strategy is to explicitly identify sets of marker genes that
 are highly expressed in each individual cell. This does not require
