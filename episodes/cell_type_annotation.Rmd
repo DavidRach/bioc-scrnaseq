@@ -37,6 +37,7 @@ library(SingleR)
 library(bluster)
 library(scater)
 library(scran)
+library(scrapper)
 library(pheatmap)
 library(GSEABase)
 ```
@@ -66,9 +67,13 @@ sce <- sce[,ind]
 The SCE object needs to contain log-normalized expression counts as well as PCA coordinates in the reduced dimensions, so we compute those here: 
 
 ```{r preproc, warning = FALSE}
-sce <- logNormCounts(sce)
+sce <- sce |> 
+  normalizeRnaCounts.se() |> 
+  chooseRnaHvgs.se()
 
-sce <- runPCA(sce)
+sce <- sce |> 
+  runPca.se(features = rowData(sce)$hvg)
+
 ```
 
 ## Clustering
@@ -93,44 +98,44 @@ connected to cells in the same community than they are to cells of different
 communities. Each community represents a cluster that we can use for downstream
 interpretation.
 
-Here, we use the `clusterCells()` function from the
-[scran](https://bioconductor.org/packages/scran) package to perform
+Here, we use the `clusterGraph.se()` function from the
+[scrapper](https://bioconductor.org/packages/release/bioc/html/scrapper.html) package to perform
 graph-based clustering using the [Louvain
 algorithm](https://doi.org/10.1088/1742-5468/2008/10/P10008) for
 community detection. All calculations are performed using the top PCs to
-take advantage of data compression and denoising. This function returns
-a vector containing cluster assignments for each cell in our
-`SingleCellExperiment` object. We use the `colLabels()` function to assign the
-cluster labels as a factor in the column data.
+take advantage of data compression and denoising. This function adds a "clusters" column to the `colData`.
+
 
 ```{r cluster}
-colLabels(sce) <- clusterCells(sce, use.dimred = "PCA",
-                               BLUSPARAM = NNGraphParam(cluster.fun = "louvain"))
+sce <- clusterGraph.se(sce)
 
-table(colLabels(sce))
+table(sce$clusters)
 ```
-You can see we ended up with `r length(table(colLabels(sce)))` clusters of varying sizes.
+
+<!-- scrapper::clusterGraph.se is actually about 3x slower than scran::clusterCells which calls bluster::clusterRows -->
+
+You can see we ended up with `r length(levels(sce$clusters))` clusters of varying sizes.
 
 We can now overlay the cluster labels as color on a UMAP plot:
 
 ```{r cluster-viz}
-sce <- runUMAP(sce, dimred = "PCA")
+sce <- runUmap.se(sce)
 
-plotReducedDim(sce, "UMAP", color_by = "label")
+plotReducedDim(sce, "UMAP", color_by = "clusters")
 ```
 
 :::: challenge
 
-Our clusters look semi-reasonable, but what if we wanted to make them less granular? Look at the help documentation for `?clusterCells` and `?NNGraphParam` to find out what we'd need to change to get fewer, larger clusters.
+Our clusters look semi-reasonable, but what if we wanted to make them less granular? Look at the help documentation for `?clusterGraph.se` and `?buildSnnGraph` to find out what we'd need to change to get fewer, larger clusters.
 
 ::: solution
 
-We see in the help documentation for `?clusterCells` that all of the clustering algorithm details are handled through the `BLUSPARAM` argument, which needs to provide a `BlusterParam` object (of which `NNGraphParam` is a sub-class). Each type of clustering algorithm will have some sort of hyper-parameter that controls the granularity of the output clusters. Looking at `?NNGraphParam` specifically, we see an argument called `k` which is described as "An integer scalar specifying the number of nearest neighbors to consider during graph construction." If the clustering process has to connect larger sets of neighbors, the graph will tend to be cut into larger groups, resulting in less granular clusters. Try the two code blocks above once more with `k = 30`. Given their visual differences, do you think one set of clusters is "right" and the other is "wrong"?
+We see in the help documentation for `?clusterGraph.se` an argument called `num.neighbors`. Each type of clustering algorithm will have some sort of hyper-parameter that controls the granularity of the output clusters. If the clustering process has to connect larger sets of neighbors, the graph will tend to be cut into larger groups, resulting in less granular clusters. Create a new set of clusters with `k = 30`. Given their visual differences, do you think one set of clusters is "right" and the other is "wrong"?
+
 
 ```{r}
-sce$clust2 <- clusterCells(sce, use.dimred = "PCA",
-                           BLUSPARAM = NNGraphParam(cluster.fun = "louvain",
-                                                    k = 30))
+sce <- clusterGraph.se(sce, num.neighbors = 30,
+                       output.name = "clust2")
 
 plotReducedDim(sce, "UMAP", color_by = "clust2")
 ```
@@ -160,7 +165,7 @@ compared to another cluster.
 ```{r marker-detect}
 rownames(sce) <- rowData(sce)$SYMBOL
 
-markers <- scoreMarkers(sce)
+markers <- scoreMarkers.se(sce, groups = sce$clusters)
 
 markers
 ```
@@ -178,9 +183,9 @@ markers[[1]]
 Each column contains summary statistics for each gene in the given cluster.
 These are usually the mean/median/min/max of statistics like Cohen's *d* and AUC
 when comparing this cluster (cluster 1 in this case) to all other clusters.
-`mean.AUC` is usually the most important to check. AUC is the probability that a
+`auc.mean` is usually the most important to check. AUC is the probability that a
 randomly selected cell in cluster *A* has a greater expression of gene
-*X* than a randomly selected cell in cluster *B*. You can set `full.stats=TRUE` if you'd like the marker data frames to retain list columns containing each statistic for each pairwise comparison.
+*X* than a randomly selected cell in cluster *B*. 
 
 We can then inspect the top marker genes for the first cluster using the
 `plotExpression` function from the
@@ -189,18 +194,17 @@ We can then inspect the top marker genes for the first cluster using the
 ```{r plot-markers, fig.width = 10, fig.height = 10}
 c1_markers <- markers[[1]]
 
-ord <- order(c1_markers$mean.AUC, 
-             decreasing = TRUE)
+ord <- order(-c1_markers$auc.mean)
 
 top.markers <- head(rownames(c1_markers[ord,]))
 
 plotExpression(sce, 
                features = top.markers, 
-               x        = "label", 
-               color_by = "label")
+               x        = "clusters",
+               color_by = "clusters")
 ```
 
-Clearly, not every marker gene distinguishes cluster 1 from every other cluster. However, with a combination of multiple marker genes it's possible to clearly identify gene patterns that are unique to cluster 1. It's sort of like the 20 questions game - with answers to the right questions about a cell (e.g. "Do you highly express Ptn?"), you can clearly identify what cluster it falls in.
+Clearly, not every marker gene distinguishes cluster 1 from every other cluster. However, with a combination of multiple marker genes it's possible to clearly identify gene patterns that are unique to cluster 1. It's sort of like the 20 questions game - with answers to the right questions about a cell (e.g. "Do you highly express Ptn? Sox2?"), you can clearly identify what cluster it falls in.
 
 :::: challenge
 
@@ -208,10 +212,10 @@ Looking at the last plot, what clusters are most difficult to distinguish from c
 
 ::: solution
 
-You can see that at least among the top markers, cluster 6 (pale green) tends to have the least separation from cluster 1. 
+You can see that at least among the top markers, cluster 9 (purple) tends to have the least separation from cluster 1. 
 
 ```{r}
-plotReducedDim(sce, "UMAP", color_by = "label")
+plotReducedDim(sce, "UMAP", color_by = "clusters")
 ```
 
 Looking at the UMAP again, we can see that the marker gene overlap of clusters 1 and 6 makes sense. They're right next to each other on the UMAP. They're probably closely related cell types, and a less granular clustering would probably lump them together.
