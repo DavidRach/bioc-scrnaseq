@@ -466,7 +466,7 @@ package.
 example_h5ad <- system.file("extdata", "krumsiek11.h5ad",
                             package = "zellkonverter")
 
-readH5AD(example_h5ad)
+readH5AD(example_h5ad, reader = "R")
 ```
 
 We can also write a `SingleCellExperiment` to an H5AD file with the
@@ -483,6 +483,7 @@ The resulting H5AD file can then be read into Python using scanpy's
 [read_h5ad](https://scanpy.readthedocs.io/en/stable/generated/scanpy.read_h5ad.html)
 function and then directly used in compatible Python-based analysis frameworks.
 
+<!-- TODO: switch to anndataR? -->
 
 ## Exercises
 
