@@ -426,36 +426,24 @@ A related strategy is to explicitly identify sets of marker genes that
 are highly expressed in each individual cell. This does not require
 matching of individual cells to the expression values of the reference
 dataset, which is faster and more convenient when only the identities of
-the markers are available. We demonstrate this approach using cell type
-markers derived from the mouse embryo atlas dataset.
+the markers are available. 
+
+It's common to use expert-curated lists of marker genes derived from the
+literature and/or experimental experience. However for the sake of
+demonstration, in this case we'll use cell type markers derived empirically from
+the mouse embryo atlas dataset.
 
 ```{r atlas-markers}
-wilcox.z <- pairwiseWilcox(ref, ref$celltype, lfc = 1, direction = "up")
-
-markers.z <- getTopMarkers(wilcox.z$statistics, wilcox.z$pairs, 
-                           pairwise = FALSE, n = 50)
-
-lengths(markers.z)
+mrkrs <- scoreMarkers.se(ref, groups = ref$celltype)
 ```
 
-<!--- 
+This gives a list of marker statistics for each cell type. Let's look at the Erythroid3 markers:
 
-This version with scoreMarkers() produces worse looking diagnostics, so let's leave it with the pairwise Wilcox version.
-```{r atlas-markers-sM}
+```{r}
+mrkrs[["Erythroid3"]][,c("mean", "auc.mean")]
+```
 
-ref_markers <- scoreMarkers(ref, groups = ref$celltype, lfc = 1)
-
-get_top_markers <- function(marker_df, n = 100) {
-  ord <- order(marker_df$mean.AUC, decreasing = TRUE)
-  
-  rownames(marker_df[ord,])[1:n]
-}
-
-markers.z <- lapply(ref_markers, get_top_markers)
-
-``` 
-
--->
+The full table gives a large list of statistics for each gene describing how well distinguishes Erythroid3 cells from other cell types. The two selected here, mean expression and mean AUC, are important statistics to look at. They help you check that the gene is highly expressed in the cell type and can consistently discriminate the selected type from the others, respectively.
 
 Our test dataset will be as before the wild-type chimera dataset.
 
@@ -474,9 +462,11 @@ performing a Wilcoxon rank sum test between genes in and outside of the
 set, but involving only the top ranking genes by expression in each
 cell.
 
+<!-- TODO: update from here. -->
+
 ```{r create-gsets, message = FALSE}
-all.sets <- lapply(names(markers.z), 
-                   function(x) GeneSet(markers.z[[x]], setName = x))
+all.sets <- lapply(names(mrkrs), 
+                   function(x) GeneSet(mrkrs[[x]], setName = x))
 
 all.sets <- GeneSetCollection(all.sets)
 
