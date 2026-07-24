@@ -177,7 +177,7 @@ the separation of that cluster from all other clusters.
 Here, we inspect the ranked marker gene list for the first cluster.
 
 ```{r marker-clust1}
-markers[[1]]
+head(markers[[1]], 3)
 ```
 
 Each column contains summary statistics for each gene in the given cluster.
@@ -307,7 +307,7 @@ You can see we have an assortment of different cell types in the reference (with
 ```{r ref-celltypes}
 tab <- sort(table(ref$celltype), decreasing = TRUE)
 
-tab
+data.frame(tab)
 ```
 
 We need the normalized log counts, so we add those on: 
@@ -462,11 +462,17 @@ performing a Wilcoxon rank sum test between genes in and outside of the
 set, but involving only the top ranking genes by expression in each
 cell.
 
-<!-- TODO: update from here. -->
-
 ```{r create-gsets, message = FALSE}
+get_top_n <- function(mrk_df, ntop = 100) {
+  o = order(mrk_df$auc.median, decreasing = TRUE)
+  
+  rownames(mrk_df[head(o, ntop),])
+}
+
 all.sets <- lapply(names(mrkrs), 
-                   function(x) GeneSet(mrkrs[[x]], setName = x))
+                   function(x) {
+                     GeneSet(get_top_n(mrkrs[[x]]), setName = x) 
+                   })
 
 all.sets <- GeneSetCollection(all.sets)
 
@@ -481,8 +487,10 @@ cell.aucs <- AUCell_calcAUC(all.sets, rankings)
 
 results <- t(assay(cell.aucs))
 
-head(results)
+head(results, 3)
 ```
+
+<!-- TODO Check these AUCell results -->
 
 We assign cell type identity to each cell in the test dataset by taking
 the marker set with the top AUC as the label for that cell. Our new
