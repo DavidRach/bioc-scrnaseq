@@ -31,7 +31,7 @@ options(digits = 3)
 
 ### Overview 
 
-Within the [R](https://www.r-project.org/) ecosystem, the [Bioconductor](https://bioconductor.org/) project provides tools for the analysis and comprehension of high-throughput genomics data.
+Within the [R ecosystem](https://www.r-project.org/), the [Bioconductor](https://bioconductor.org/) project provides tools for the analysis and comprehension of high-throughput genomics data.
 The scope of the project covers microarray data, various forms of sequencing (RNA-seq, ChIP-seq, bisulfite, genotyping, etc.), proteomics, flow cytometry and more.
 One of Bioconductor's main selling points is the use of common data structures to promote interoperability between packages, allowing code written by different people (from different organizations, in different countries) to work together seamlessly in complex analyses. 
 
