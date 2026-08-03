@@ -73,6 +73,10 @@ platform. Our workshops typically contain a mixture of Windows, macOS, and
 Linux users; in order to be usable, our lessons must run equally well on all
 three.
 
+If there's something you want updated or changed, please reach out to the 
+maintainers on a GitHub issue or the Bioconductor Zulip so we can discuss it. 
+LLM-generated PRs will not be accepted. 
+
 ### Using GitHub
 
 If you choose to contribute via GitHub, you may want to look at [How to
