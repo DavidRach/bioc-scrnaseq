@@ -490,8 +490,6 @@ results <- t(assay(cell.aucs))
 head(results, 3)
 ```
 
-<!-- TODO Check these AUCell results -->
-
 We assign cell type identity to each cell in the test dataset by taking
 the marker set with the top AUC as the label for that cell. Our new
 labels mostly agree with the original annotation (and, thus, also with
