@@ -47,21 +47,12 @@ through TileDB-SOMA, or get slices in AnnData or Seurat objects, thus
 accelerating your research by significantly minimizing data harmonization at
 https://chanzuckerberg.github.io/cellxgene-census/.
 
-## The CuratedAtlasQueryR Project
+## cellNexus
 
-The `CuratedAtlasQueryR` is an alternative package that can also be used to access the CELLxGENE data from R through a tidy API. The data has also been harmonized, curated, and re-annotated across studies.
-
-`CuratedAtlasQueryR` supports data access and programmatic exploration of the
-harmonized atlas. Cells of interest can be selected based on ontology, tissue of
-origin, demographics, and disease. For example, the user can select CD4 T helper
-cells across healthy and diseased lymphoid tissue. The data for the selected
-cells can be downloaded locally into SingleCellExperiment objects. Pseudo
-bulk counts are also available to facilitate large-scale, summary analyses of
-transcriptional profiles. 
-
-```{r, echo = FALSE}
-knitr::include_graphics("https://raw.githubusercontent.com/carpentries-incubator/bioc-scrnaseq/main/episodes/figures/curatedAtlasQuery.png")
-```
+[`cellNexus`](https://cellnexus.org/) is "a query interface for programmatic
+exploration and retrieval of harmonised, curated, and reannotated CELLxGENE
+human-cell-atlas data." This is what we'll be using in this lesson for the most
+part since having the data pre-harmonised and pre-annotated makes life simpler.
 
 ## Data Sources in R / Bioconductor
 
@@ -69,17 +60,18 @@ There are a few options to access single cell data with R / Bioconductor.
 
 | Package | Target | Description |
 |---------|-------------|---------|
-| [hca](https://bioconductor.org/packages/hca) | [HCA Data Portal API](https://www.humancellatlas.org/data-portal/) | Project, Sample, and File level HCA data |
 | [cellxgenedp](https://bioconductor.org/packages/cellxgenedp) | [CellxGene](https://cellxgene.cziscience.com/) | Human and mouse SC data including HCA |
-| [CuratedAtlasQueryR](https://stemangiola.github.io/CuratedAtlasQueryR/) | [CellxGene](https://cellxgene.cziscience.com/) | fine-grained query capable CELLxGENE data including HCA |
+| [cellNexus](https://cellnexus.org/) | [CellxGene](https://cellxgene.cziscience.com/) | fine-grained query capable CELLxGENE data including HCA |
 
 ## Installation
+
+If you don't have `cellNexus` already:
 
 ```{r, eval=FALSE}
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install("CuratedAtlasQueryR")
+BiocManager::install("cellNexus")
 ```
 
 ## Package load 
@@ -90,7 +82,7 @@ library(BiocStyle)
 ```
 
 ```{r}
-library(CuratedAtlasQueryR)
+library(cellNexus)
 library(dplyr)
 ```
 
@@ -101,9 +93,18 @@ via the package. In this example, we are using the sample database URL which
 allows us to get a small and quick subset of the available metadata.
 
 ```{r, message = FALSE}
-metadata <- get_metadata(remote_url = CuratedAtlasQueryR::SAMPLE_DATABASE_URL) |> 
+sample_url <- cellNexus::SAMPLE_DATABASE_URL
+
+metadata <- get_metadata(cloud_metadata = sample_url) |> 
   collect()
 ```
+
+Some database details: `get_metadata()` returns a "connection" to the duckdb
+server hosting the sample metadata, so we used the `collect()` function to pull
+the corresponding table into our R session as a data.frame. This is fine for the
+small sample database, but for larger tables with huge numbers of rows, it's
+generally better to run a filtered query on the connection and *then* collect
+the much smaller result.
 
 Get a view of the first 10 columns in the metadata with `glimpse()`
 
@@ -112,6 +113,9 @@ metadata |>
   select(1:10) |>
   glimpse()
 ```
+
+These are just the first ten, but there are many more metadata columns as we'll
+see.
 
 ## A tangent on the pipe operator
 
@@ -145,27 +149,50 @@ We can tally the tissue types across datasets to see what tissues the experiment
 
 ```{r}
 metadata |>
-  distinct(tissue, dataset_id) |> 
-  count(tissue) |> 
+  distinct(tissue_groups, dataset_id) |> 
+  count(tissue_groups) |> 
   arrange(-n)
 ```
 
-We can do the same for the assay types:
+```{r include=FALSE}
+tissue_cnts <- metadata |>
+  distinct(tissue_groups, dataset_id) |> 
+  count(tissue_groups) |> 
+  arrange(-n)
+```
+
+
+That is to say, there are `r tissue_cnts$n[1]` studies that investigate `r tissue_cnts$tissue_groups[1]`.
+
+We can do the same for the imputed ethnicities:
 
 ```{r}
 metadata |>
-    distinct(assay, dataset_id) |>
-    count(assay)
+    distinct(imputed_ethnicity, dataset_id) |>
+    count(imputed_ethnicity)
 ```
 
 :::: challenge
 
-Look through the full list of metadata column names. Do any other metadata
-columns jump out as interesting to you for your work?
+Look at the other metadata columns with `colnames(metadata)` and inspect a few
+that catch your interest.
 
-```{r eval=FALSE}
-names(metadata)
+::: solution
+
+Let's look at filesize, sex, and cell_type. We'll collect the results locally
+and shuffle the rows here just to see some variability beyond the first sample
+listed.
+
+```{r}
+metadata |> 
+  select(age_days, cell_type_unified_ensemble) |> 
+  slice_sample(prop = 1)
 ```
+
+You can see that age_days is commonly NA and cell types are mostly immune
+related (that's what was selected for in the sample database).
+
+:::
 
 ::::
 
@@ -179,17 +206,17 @@ data.
 For the sake of demonstration, we'll focus this small subset of samples. We use the `filter()` function from the `dplyr` package to identify cells meeting the following criteria:
 
 * African ethnicity
-* 10x assay
+* any 10x assay
 * lung parenchyma tissue
 * CD4 cells
+
+<!-- TODO: Find an example that works better with the sample database  -->
 
 ```{r}
 sample_subset <- metadata |>
     filter(
-        ethnicity == "African" &
-        grepl("10x", assay) &
-        tissue == "lung parenchyma" &
-        grepl("CD4", cell_type)
+        grepl("East Asian", imputed_ethnicity) &
+        tissue == "lung parenchyma" 
     )
 ```
 
