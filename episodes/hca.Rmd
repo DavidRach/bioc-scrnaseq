@@ -71,7 +71,7 @@ If you don't have `cellNexus` already:
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install("cellNexus")
+BiocManager::install("MangiolaLaboratory/cellNexus")
 ```
 
 ## Package load 
@@ -205,18 +205,16 @@ data.
 
 For the sake of demonstration, we'll focus this small subset of samples. We use the `filter()` function from the `dplyr` package to identify cells meeting the following criteria:
 
-* African ethnicity
-* any 10x assay
-* lung parenchyma tissue
-* CD4 cells
+* Cell type: CD4 TCM
+* Tissue group: Respiratory system
 
 <!-- TODO: Find an example that works better with the sample database  -->
 
 ```{r}
 sample_subset <- metadata |>
     filter(
-        grepl("East Asian", imputed_ethnicity) &
-        tissue == "lung parenchyma" 
+        cell_type_unified_ensemble == "cd4 tcm" &
+        tissue_groups == "respiratory system" 
     )
 ```
 
@@ -225,10 +223,10 @@ Out of the `r nrow(metadata)` cells in the sample database, `r nrow(sample_subse
 Now we can use `get_single_cell_experiment()`:
 
 ```{r, message = FALSE}
-single_cell_counts <- sample_subset |>
+sce <- sample_subset |>
     get_single_cell_experiment()
 
-single_cell_counts
+sce
 ```
 
 You can provide different arguments to `get_single_cell_experiment()` to get different formats or subsets of the data, like data scaled to counts per million:
@@ -241,30 +239,22 @@ sample_subset |>
 or data on only specific genes:
 
 ```{r, message = FALSE}
-single_cell_counts <- sample_subset |>
-    get_single_cell_experiment(assays = "cpm", features = "PUM1")
+sce <- sample_subset |>
+    get_single_cell_experiment(assays = "cpm", 
+                               features = "ENSG00000085265") # FCN1
 
-single_cell_counts
-```
-
-Or if needed, the H5 `SingleCellExperiment` can be returned a Seurat
-object (note that this may take a long time and use a lot of memory depending on
-how many cells you are requesting).
-
-```{r,eval=FALSE}
-single_cell_counts <- sample_subset |>
-    get_seurat()
-
-single_cell_counts
+sce
 ```
 
 ## Save your `SingleCellExperiment`
 
-Once you have a dataset you're happy with, you'll probably want to save it. The recommended way of saving these `SingleCellExperiment` objects is to use
+Once you have a dataset you're happy with, you'll probably want to save it. The
+recommended way of saving these `SingleCellExperiment` objects is to use
 `saveHDF5SummarizedExperiment` from the `HDF5Array` package.
 
 ```{r, eval=FALSE}
-single_cell_counts |> saveHDF5SummarizedExperiment("single_cell_counts")
+sce |> 
+  saveHDF5SummarizedExperiment(dir = "my_sce")
 ```
 
 ## Exercises
@@ -273,14 +263,16 @@ single_cell_counts |> saveHDF5SummarizedExperiment("single_cell_counts")
 
 #### Exercise 1: Basic counting + piping
 
-Use `count` and `arrange` to get the number of cells per tissue in descending
-order.
+Use `count` and `arrange` to get the number of cells per coarse tissue group in
+descending order.
 
 :::::::::::::: solution
 
+We specify `dplyr::count` here to avoid a function name conflict with `matrixStats::count`, which might be loaded if you ran the `saveHDF5SummarizedExperiment()` above.
+
 ```{r}
 metadata |>
-    count(tissue) |>
+    dplyr::count(tissue_groups) |>
     arrange(-n)
 ```
 :::::::::::::::::::::::
@@ -292,17 +284,23 @@ metadata |>
 #### Exercise 2: Tissue & type counting
 
 `count()` can group by multiple factors by simply adding another grouping column
-as an additional argument. Get a tally of the highest number of cell types per
-tissue combination. What tissue has the most numerous type of cells?
+as an additional argument. 1) Find which tissue + cell type combination has the
+most number of observations in the sample database and 2) Then find which tissue
+has the most types of cells.
 
 :::::::::::::: solution
 
 ```{r}
 metadata |>
-    count(tissue, cell_type) |>
+    dplyr::count(tissue_groups, cell_type_unified_ensemble) |>
     arrange(-n) |> 
-    head(n = 1)
+    head(1)
 
+metadata |> 
+  dplyr::count(tissue_groups, cell_type_unified_ensemble) |>
+  dplyr::count(tissue_groups) |> 
+  arrange(-n) |> 
+  head(1)
 ```
 :::::::::::::::::::::::
 
@@ -310,54 +308,21 @@ metadata |>
 
 :::::::::::::::::::::::::::::::::: challenge
 
-#### Exercise 3: Comparing metadata categories
+#### Exercise 3: Highly specific cell groups
 
-Spot some differences between the `tissue` and `tissue_harmonised` columns.
-Use `count` to summarise.
-
-:::::::::::::: solution
-
-```{r}
-metadata |>
-    count(tissue) |>
-    arrange(-n)
-
-metadata |>
-    count(tissue_harmonised) |>
-    arrange(-n)
-```
-
-For example you can see that `tissue_harmonised` merges the `cortex of kidney`
-and `kidney` groups in `tissue`.
-
-To see the full list of curated columns in the metadata, see the Details section
-in the `?get_metadata` documentation page.
-    
-:::::::::::::::::::::::
-
-:::::::::::::::::::::::::::::::::::::::::::::
-
-:::::::::::::::::::::::::::::::::: challenge
-
-#### Exercise 4: Highly specific cell groups
-
-Now that we are a little familiar with navigating the metadata, let's obtain
-a `SingleCellExperiment` of 10X scRNA-seq counts of `cd8 tem` `lung` cells for
-females older than `80` with `COVID-19`. Note: Use the harmonized columns, where
-possible. 
+`cellNexus` metadata comes with pre-computed QC stats like mitochondrial percent
+and feature count. There's also a utility function `keep_quality_cells()` that
+can pre-filter empty droplets, dead cells, and doublets. Use that function and
+filter on other metadata columns to choose a highly-specific set of cells.
 
 :::::::::::::: solution
 
 ```{r, message = FALSE}
 metadata |> 
-    filter(
-        sex == "female" &
-        age_days > 80 * 365 &
-        grepl("10x", assay) &
-        disease == "COVID-19" &  
-        tissue_harmonised == "lung" & 
-        cell_type_harmonised == "cd8 tem"
-    ) |>
+  keep_quality_cells() |> 
+  filter(tissue_groups == "respiratory system" & 
+           cell_type_unified_ensemble == "t cd4" & 
+           imputed_ethnicity == "East Asian") |>
     get_single_cell_experiment()
 ```
 
@@ -368,7 +333,7 @@ You can see we don't get very many cells given the strict set of conditions we u
 
 ::::::::::::::::::::::::::::::::::::: keypoints 
 
-- The `CuratedAtlasQueryR` package provides programmatic access to single-cell reference maps from the Human Cell Atlas.
+- The `cellNexus` package provides programmatic access to single-cell reference maps from the Human Cell Atlas.
 - The package provides functionality to query for cells of interest and to download them into a `SingleCellExperiment` object.
 
 ::::::::::::::::::::::::::::::::::::::::::::::::
