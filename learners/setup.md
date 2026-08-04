@@ -18,7 +18,7 @@ double-clicking the icon and enter these commands:
 install.packages(c("BiocManager"))
 
 BiocManager::install(c("AUCell", "batchelor", "BiocStyle", 
-                       "CuratedAtlasQueryR", "DropletUtils", "duckdb",
+                       "MangiolaLaboratory/cellNexus", "DropletUtils", "duckdb",
                        "EnsDb.Mmusculus.v79", "MouseGastrulationData",
                        "scDblFinder", "scrapper",  "SingleR", 
                        "TENxBrainData", "zellkonverter"),
