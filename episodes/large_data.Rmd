@@ -111,15 +111,16 @@ representations (e.g., subsetting, combining, methods from
 [DelayedMatrixStats](https://bioconductor.org/packages/DelayedMatrixStats) 
 as well as representation-agnostic C++ code 
 using [beachmat](https://bioconductor.org/packages/beachmat).
-For example, we compute QC metrics below with the same `calculateQCMetrics()` 
+For example, we compute QC metrics below with the same `computeRnaQcMetrics()` 
 function that we used in the other workflows.
 
 ```{r, message = FALSE}
-library(scater)
+library(scrapper)
 
 is.mito <- grepl("^mt-", rowData(sce.brain)$Symbol)
 
-qcstats <- perCellQCMetrics(sce.brain, subsets = list(Mt = is.mito))
+qcstats <- computeRnaQcMetrics(counts(sce.brain),
+                               subsets = list(mito = is.mito))
 
 qcstats
 ```
@@ -137,8 +138,13 @@ exploration and visualization on their personal machines.
 Parallelization of calculations across genes or cells is an obvious strategy for
 speeding up scRNA-seq analysis workflows.
 
-The `r Biocpkg("BiocParallel")` package provides a common interface for parallel
-computing throughout the Bioconductor ecosystem, manifesting as a `BPPARAM`
+Many packages/functions have built-in parallelization via arguments called
+`num.threads`, `cores`, `Ncpus`, etc. or by allowing the user to set
+`options("mc.cores")`. These arguments/settings are often the best and simplest
+choice, so look for these first.
+
+In the Bioconductor ecosystem, `r Biocpkg("BiocParallel")` package provides a
+common interface for parallel computing, usually presenting as a `BPPARAM`
 argument in compatible functions. We can also use `BiocParallel` with more
 expressive functions directly through the package's interface.
 
@@ -165,51 +171,16 @@ bplapply(
 )
 ```
 
-A couple notes on this:
+Many other Bioconductor functions have `BPPARAM` arguments. Whenever you see
+that, you can set it to your preferred parameterization (`param` in the example
+above) to enable parallelization.
 
-* The number of workers is explicitly set to 1 in this example due to the limited resources used to render the online material. 
-* Parallel execution with `MulticoreParam()` is not supported on Windows. See `?SnowParam()` as an alternative.
+Note that parallel execution with `MulticoreParam()` is not supported on Windows. See `?SnowParam()` as an alternative.
 
 There exists a diverse set of parallelization backends depending on available
-hardware and operating systems.
-
-For example, we might use forking across two cores to parallelize the variance
-calculations on a Unix system:
-
-```{r parallel-mc, message = FALSE}
-library(MouseGastrulationData)
-
-library(scran)
-
-sce <- WTChimeraData(samples = 5, type = "processed")
-
-sce <- logNormCounts(sce)
-
-dec.mc <- modelGeneVar(sce, BPPARAM = MulticoreParam(2))
-
-dec.mc
-```
-
-Another approach would be to distribute jobs across a network of computers,
-which yields the same result:
-
-```{r parallel-snow, eval=FALSE}
-dec.snow <- modelGeneVar(sce, BPPARAM = SnowParam(2))
-```
-
-For high-performance computing (HPC) systems with a cluster of compute nodes, 
-we can distribute jobs via the job scheduler using the `BatchtoolsParam` class.
-The example below assumes a SLURM cluster, though the settings can be easily 
-configured for a particular system 
-(see `r Biocpkg("BiocParallel", "BiocParallel_BatchtoolsParam.pdf", "here")` for
-details).
-
-```{r batch-param, eval=FALSE}
-# 2 hours, 8 GB, 1 CPU per task, for 10 tasks.
-rs <- list(walltime = 7200, memory = 8000, ncpus = 1)
-
-bpp <- BatchtoolsParam(10, cluster = "slurm", resources = rs)
-```
+hardware and operating systems. Beyond parallelizing across cores/threads on the host machine, you can also submit jobs on a HPC job scheduler (e.g. Slurm) using the `BatchtoolsParam` class.
+See `r Biocpkg("BiocParallel", "BiocParallel_BatchtoolsParam.pdf", "here")` for
+details.
 
 Parallelization is best suited for independent, CPU-intensive tasks where the
 division of labor results in a concomitant reduction in compute time. It is not
@@ -224,29 +195,13 @@ parallel job managers often works well for simple cases, it is sometimes
 necessary to explicitly specify what data/libraries are sent to / loaded on the
 parallel workers in order to avoid unnecessary overhead.
 
-:::: challenge
-
-How do you turn on progress bars with parallel processing?
-
-::: solution
-
-From `?MulticoreParam` : 
-
-> `progressbar` logical(1) Enable progress bar (based on plyr:::progress_text). Enabling the progress bar changes the default value of tasks to .Machine$integer.max, so that progress is reported for each element of X.
-
-Progress bars are a helpful way to gauge whether that task is going to take 5 minutes or 5 hours.
-
-:::
-
-::::
-
 ## Fast approximations
 
 ### Nearest neighbor searching
 
 Identification of neighbouring cells in PC or expression space is a common procedure
-that is used in many functions, e.g., `buildSNNGraph()`, `doubletCells()`.
-The default is to favour accuracy over speed by using an exact nearest neighbour
+that is used in many functions, e.g., `buildSnnGraph()` in `clusterGraph.se()`.
+One can favour accuracy over speed by using an exact nearest neighbour
 (NN) search, implemented with the $k$-means for $k$-nearest neighbours algorithm.
 However, for large data sets, it may be preferable to use a faster approximate 
 approach.
@@ -257,79 +212,42 @@ To demonstrate, we will use the wild-type chimera data for which we had applied
 graph-based clustering using the Louvain algorithm for community detection:
 
 ```{r pca-and-cluster}
-library(bluster)
-
-sce <- runPCA(sce)
-
-colLabels(sce) <- clusterCells(sce, use.dimred = "PCA",
-                               BLUSPARAM = NNGraphParam(cluster.fun = "louvain"))
-```
-
-The above clusters on a nearest neighbor graph generated with an exact neighbour
-search. We repeat this below using an approximate search, implemented using the
-[Annoy](https://github.com/spotify/Annoy) algorithm. This involves constructing
-a `AnnoyParam` object to specify the search algorithm and then passing it to the
-parameterization of the `NNGraphParam()` function. The results from the exact
-and approximate searches are consistent with most clusters from the former
-re-appearing in the latter. This suggests that the inaccuracy from the
-approximation can be largely ignored.
-
-```{r cluster-annoy}
-library(scran)
-
+library(MouseGastrulationData)
 library(BiocNeighbors)
 
-clusters <- clusterCells(sce, use.dimred = "PCA",
-                         BLUSPARAM = NNGraphParam(cluster.fun = "louvain",
-                                                  BNPARAM = AnnoyParam()))
+sce <- WTChimeraData(samples = 5, type = "processed") |> 
+  normalizeRnaCounts.se() |> 
+  chooseRnaHvgs.se()
 
-table(exact = colLabels(sce), approx = clusters)
+sce <- sce |> 
+  runPca.se(features = rowData(sce)$hvg) 
 ```
 
-The similarity of the two clusterings can be quantified by calculating the pairwise Rand index: 
+For the sake of demonstration, we'll compare the cluster assignments with
+approximate versus exact algorithms.
 
-```{r check-annoy}
-rand <- pairwiseRand(colLabels(sce), clusters, mode = "index")
+```{r}
+pc_mat <- reducedDim(sce, "PCA") |> t()
 
-stopifnot(rand > 0.8)
+gr_apx <- buildSnnGraph(pc_mat) # defaults to AnnoyParam()
+gr_ext <- buildSnnGraph(pc_mat, BNPARAM = KmknnParam())
+
+cl_apx <- clusterGraph(gr_apx)
+cl_ext <- clusterGraph(gr_ext)
+
+table(cl_apx$membership, 
+      cl_ext$membership)
 ```
 
-Note that Annoy writes the NN index to disk prior to
-performing the search. Thus, it may not actually be faster
-than the default exact algorithm for small datasets,
-depending on whether the overhead of disk write is offset by
-the computational complexity of the search. It is also not
-difficult to find situations where the approximation
-deteriorates, especially when the number of features exceeds
-the number of data points, though this may not have an
-appreciable impact on the biological conclusions.
-
-```{r bad-approx}
-set.seed(1000)
-
-Y <- matrix(rnorm(3000*1000), ncol = 1000)
-
-exact <- findKNN(Y, k = 20)
-
-approx <- findKNN(Y, k = 20, BNPARAM = AnnoyParam())
-
-mean(exact$index != approx$index)
-```
-
-You can see that in this contrived 1000-dimensional dataset, the approximate method didn't frequently get the same result as the exact method.
-
-<!-- TODO: contrive a better example. They usually have close to the same neighbor sets, just in a different order -->
+You can see that although they're pretty close, there's some disagreement.
 
 ### Singular value decomposition 
 
-The singular value decomposition (SVD) underlies the PCA used throughout our
-analyses, e.g., in `denoisePCA()`, `fastMNN()`, `doubletCells()`. (Briefly, the
-right singular vectors are the eigenvectors of the gene-gene covariance matrix,
-where each eigenvector represents the axis of maximum remaining variation in the
-PCA.) The default `base::svd()` function performs an exact SVD that is not
-performant for large datasets. Instead, we use fast approximate methods from the
-`r CRANpkg("irlba")` and `r CRANpkg("rsvd")` packages, conveniently wrapped into
-the `r Biocpkg("BiocSingular")` package for ease of use and package development.
+[Singular value decomposition](https://www.huber.embl.de/msmb/07-chap.html#singular-value-decomposition) (SVD) is the algorithm underlying PCA. The default `base::svd()`
+function performs an exact SVD that is not performant for large datasets.
+Instead, we use fast approximate methods from the `r CRANpkg("irlba")` and `r
+CRANpkg("rsvd")` packages, conveniently wrapped into the `r
+Biocpkg("BiocSingular")` package for ease of use and package development.
 Specifically, we can change the SVD algorithm used in any of these functions by
 simply specifying an alternative value for the `BSPARAM` argument.
 
@@ -574,6 +492,7 @@ system.time({i.out <- runPCA(sce.brain,
 
 * OSCA book, [Chapter 14](https://bioconductor.org/books/release/OSCA.advanced/dealing-with-big-data.html): Dealing with big data 
 * The `BiocParallel` `r Biocpkg("BiocParallel", vignette = "Introduction_To_BiocParallel.html", label = "intro vignette")`. 
+* Modern Statistics for Modern Biology, [Ch. 7 Multivariate Analysis](https://www.huber.embl.de/msmb/07-chap.html)
 ::::::::::::::
 
 ::::::::::::::::::::::::::::::::::::: keypoints 
