@@ -81,7 +81,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE, warning = FALS
 library(BiocStyle)
 ```
 
-```{r}
+```{r load_libraries}
 library(cellNexus)
 library(dplyr)
 ```
@@ -92,7 +92,7 @@ The metadata allows the user to get a lay of the land of what is available
 via the package. In this example, we are using the sample database URL which
 allows us to get a small and quick subset of the available metadata.
 
-```{r, message = FALSE}
+```{r load_meta, message = FALSE}
 sample_url <- cellNexus::SAMPLE_DATABASE_URL
 
 metadata <- get_metadata(cloud_metadata = sample_url) |> 
@@ -115,7 +115,10 @@ metadata |>
 ```
 
 These are just the first ten, but there are many more metadata columns as we'll
-see.
+see. Additional metadata from the original CELLxGENE annotations such as sex,
+disease, and assay type [are
+available](https://github.com/MangiolaLaboratory/cellNexus#join-census-metadata).
+But here we will stick with what's in the sample database.
 
 ## A tangent on the pipe operator
 
@@ -179,9 +182,9 @@ that catch your interest.
 
 ::: solution
 
-Let's look at filesize, sex, and cell_type. We'll collect the results locally
-and shuffle the rows here just to see some variability beyond the first sample
-listed.
+Let's look at `age_days` and `cell_type_unified_ensemble`. We'll collect the
+results locally and shuffle the rows here just to see some variability beyond
+the first sample listed.
 
 ```{r}
 metadata |> 
@@ -326,7 +329,10 @@ metadata |>
     get_single_cell_experiment()
 ```
 
-You can see we don't get very many cells given the strict set of conditions we used.
+You can see we don't get very many cells given the strict set of conditions we
+used. Reminder that you can also filter on other annotations from CELLxGENE like
+sex, disease, assay type, etc. if you [join them on](age_days,
+cell_type_unified_ensemble).
 :::::::::::::::::::::::
 
 :::::::::::::::::::::::::::::::::::::::::::::
