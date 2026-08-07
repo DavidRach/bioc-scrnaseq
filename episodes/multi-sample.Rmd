@@ -374,6 +374,8 @@ abundances <- table(merged$celltype.mapped, merged$sample)
 
 abundances <- unclass(abundances) 
 
+abundances <- abundances[rowSums(abundances) >= 10,]
+
 extra.info <- colData(merged)[match(colnames(abundances), merged$sample),]
 
 y.ab <- DGEList(abundances, samples = extra.info)
@@ -422,7 +424,7 @@ To do so, we first normalize the data with `calcNormFactors` and then we fit and
 estimate a QL-model for the abundance data.
 
 ```{r}
-y.ab2 <- calcNormFactors(y.ab)
+y.ab2 <- normLibSizes(y.ab)
 
 y.ab2$samples$norm.factors
 ```
