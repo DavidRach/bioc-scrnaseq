@@ -36,7 +36,6 @@ library(MouseGastrulationData)
 library(SingleR)
 library(bluster)
 library(scater)
-library(scran)
 library(scrapper)
 library(pheatmap)
 library(GSEABase)
@@ -697,12 +696,12 @@ Remember, this is an exploratory diagnostic, not the final word! At this point i
 -   For manual annotation, cells are first clustered with unsupervised methods
     such as graph-based clustering followed by community detection algorithms such
     as Louvain or Leiden.
--   The `clusterCells` function from the `r Biocpkg("scran")` package provides different
-    algorithms that are commonly used for the clustering of scRNA-seq data.
+-   The `clusterGraph.se()` function from the `r Biocpkg("scrapper")` package 
+    enables graph clustering for scRNA-seq data.
 -   Once clusters have been obtained, cell type labels are then manually
     assigned to cell clusters by matching cluster-specific upregulated marker
     genes with prior knowledge of cell-type markers.
--   The `scoreMarkers` function from the `r Biocpkg("scran")` package 
+-   The `scoreMarkers.se()` function from the `r Biocpkg("scrapper")` package 
     package can be used to find candidate marker genes for clusters of cells by
     ranking differential expression between pairs of clusters.
 -   Computational annotation using published reference datasets or curated gene sets

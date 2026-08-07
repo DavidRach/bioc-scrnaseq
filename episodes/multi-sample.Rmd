@@ -591,9 +591,6 @@ Imagine you had one sample that received a drug treatment and one that did not, 
     counts for all cells with the same combination of label and sample.
 -   The `aggregateAcrossCells` function from the `r Biocpkg("scater")` package
     facilitates the creation of pseudo-bulk samples.   
--   The `pseudoBulkDGE` function from the `r Biocpkg("scran")` package can be used
-    to detect significant changes in expression between conditions for pseudo-bulk samples
-    consisting of cells of the same type.
 -   Differential abundance (DA) analysis aims at identifying significant changes in
     cell type abundance across conditions.
 -   DA analysis uses bulk DE methods such as `r Biocpkg("edgeR")` and `r Biocpkg("DESeq2")`,
