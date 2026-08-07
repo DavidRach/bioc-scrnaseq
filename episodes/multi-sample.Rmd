@@ -49,7 +49,6 @@ library(scater)
 library(ggplot2)
 library(scrapper)
 library(pheatmap)
-library(scuttle)
 
 sce <- WTChimeraData(samples = 5:10, type = "processed")
 
@@ -181,18 +180,18 @@ specific cell type. We are then able to detect differences in gene expression
 between two different conditions for one cell type at a time.
 
 To compute pseudo-bulk samples, we use the `aggregateAcrossCells` function in the 
-`scuttle` package, which takes as input not only a SingleCellExperiment, 
+`scrapper` package, which takes as input not only a SingleCellExperiment, 
 but also the label used for the identification of cell groups/types.
-Here, we use as not just the cell type label, but also the sample ID, as
+Here, we use not just the cell type label, but also the sample ID, as
 we want be able to discern between replicates and conditions later in the analysis.
 
 ```{r}
 # Using 'label' and 'sample' as our two factors; each column of the output
 # corresponds to one unique combination of these two factors.
 
-summed <- aggregateAcrossCells(
+summed <- aggregateAcrossCells.se(
     merged, 
-    id = colData(merged)[,c("celltype.mapped", "sample")]
+    factors = colData(merged)[,c("celltype.mapped", "sample")]
 )
 
 summed
@@ -217,7 +216,8 @@ metadata.
 ```{r}
 current <- summed[, summed$celltype.mapped == "Mesenchyme"]
 
-y <- DGEList(counts(current), samples = colData(current))
+y <- DGEList(assay(current, "sums"), 
+             samples = colData(current))
 
 y
 ```
@@ -229,15 +229,15 @@ We can see that in our case we don't have low quality samples, so there is no ne
 for such a filtering step.
 
 ```{r}
-discarded <- current$ncells < 10
+discarded <- current$counts < 10
 
 y <- y[,!discarded]
 
-summary(discarded)
+table(discarded)
 ```
 
 Typically, we also want to filter out genes
-with too low of an expression to be meaningfully retained in a statistcal analysis
+with too low of an expression to be meaningfully retained in a statistical analysis
 for differential expression.
 
 ```{r}
@@ -245,16 +245,16 @@ keep <- filterByExpr(y, group = current$tomato)
 
 y <- y[keep,]
 
-summary(keep)
+table(keep)
 ```
 
 We can now proceed with normalizing the data. There are several approaches for
 normalizing bulk data, that are thus readily applicable to pseudo-bulk data.
 Here, we use the Trimmed Mean of *M*-values (TMM) method, implemented in the
-`edgeR` package within the `calcNormFactors` function.
+`edgeR` package within the `normLibSizes` function.
 
 ```{r}
-y <- calcNormFactors(y)
+y <- normLibSizes(y)
 
 y$samples
 ```
@@ -265,7 +265,6 @@ insufficient cells/reads/UMIs in any of the pseudo-bulk profiles.
 
 In our case, we verify that all these plots are centered on 0 ($y$-axis) and
 display a trumpet shape, as expected.
-
 
 ```{r}
 par(mfrow = c(2,3))
@@ -343,31 +342,6 @@ summary(decideTests(res))
 topTags(res)
 ```
 
-All the previous steps can be conveniently performed for each cell type, with
-the `pseudoBulkDGE` function from the [scran](https://bioconductor.org/packages/scran)
-package.
-
-```{r}
-summed.filt <- summed[,summed$ncells >= 10]
-
-de.results <- pseudoBulkDGE(
-    summed.filt, 
-    label = summed.filt$celltype.mapped,
-    design = ~factor(pool) + tomato,
-    coef = "tomatoTRUE",
-    condition = summed.filt$tomato 
-)
-```
-
-The returned object is a list of `DataFrame`s each storing the results for one of the cell types.
-Each of these `DataFrame`s also contains the intermediate results of the full [edgeR](https://bioconductor.org/packages/edgeR) pipeline carried out above, which allows us to apply diagnostics and visualization of individual steps of the pipeline.
-
-```{r}
-cur.results <- de.results[["Allantois"]]
-
-cur.results[order(cur.results$PValue),]
-```
-
 :::: challenge
 
 Clearly some of the results have low *p*-values. What about the effect sizes? What does `logFC` stand for?
@@ -386,8 +360,8 @@ Clearly some of the results have low *p*-values. What about the effect sizes? Wh
 ## Differential Abundance (DA) analysis
 
 In addition to differences in gene expression, we also want to find differences
-in cell type *abundance* between conditions (here in tomato positive vs wild type
-samples).
+in cell type *abundance* (aka cell type *composition*) between conditions (here
+in tomato positive vs wild type samples).
 
 Therefore, we first quantify the number of cells for each cell type, and then
 fit a model to detect differences between the injected cells and the background.
