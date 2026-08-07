@@ -13,7 +13,7 @@ exercises: 10 # Minutes of exercises in the lesson
 ::::::::::::::::::::::::::::::::::::: objectives
 
 - Learn about different resources for public single-cell RNA-seq data.
-- Access data from the Human Cell Atlas using the `CuratedAtlasQueryR` package.
+- Access data from the Human Cell Atlas using the `cellNexus` package.
 - Query for cells of interest and download them into a `SingleCellExperiment` object. 
 
 ::::::::::::::::::::::::::::::::::::::::::::::::
@@ -74,7 +74,7 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install("MangiolaLaboratory/cellNexus")
 ```
 
-## Package load 
+## Setup
 
 ```{r chunk-opts, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE, warning = FALSE)
@@ -122,26 +122,32 @@ But here we will stick with what's in the sample database.
 
 ## A tangent on the pipe operator
 
-The vignette materials provided by `CuratedAtlasQueryR` show the use of the
-'native' R pipe (implemented after R version `4.1.0`). For those not familiar
-with the pipe operator (`|>`), it allows you to chain functions by passing the
-left-hand side as the first argument to the function on the right-hand side. It is used extensively in the `tidyverse` dialect of R, especially within the [`dplyr` package](https://dplyr.tidyverse.org/).
+The vignette materials provided by `cellNexus` show the use of the 'native' R
+pipe. For those not familiar with the pipe operator (`|>`), it allows you to
+chain functions by passing the left-hand side as the first argument to the
+function on the right-hand side. It is used extensively in the [`tidyverse`
+dialect of R](https://dplyr.tidyverse.org/).
 
-The pipe operator can be read as "and then". Thankfully, R doesn't care about whitespace, so it's common to start a new line after a pipe. Together these points enable users to "chain" complex sequences of commands into readable blocks.
+The pipe operator can be read as "and then". R is very permissive when it comes
+to whitespace, so it's common to start a new line after a pipe. Together these
+points enable users to "chain" complex sequences of commands into readable
+blocks.
 
-In this example, we start with the built-in `mtcars` dataset and then filter to rows where `cyl` is not equal to 4, and then compute the mean `disp` value by each unique `cyl` value.
+In this example, we start with the built-in `mtcars` dataset and then filter to
+rows where `cyl` is not equal to 4, and then by each unique `cyl` value, compute
+the mean `disp` value.
 
 ```{r}
 mtcars |> 
   filter(cyl != 4) |> 
-  summarise(avg_disp = mean(disp),
-            .by = cyl)
+  summarise(.by = cyl,
+            avg_disp = mean(disp))
 ```
 
-This command is equivalent to the following:
+Which is equivalent to the following:
 
 ```{r eval=FALSE}
-summarise(filter(mtcars, cyl != 4), avg_disp = mean(disp), .by = cyl)
+summarise(filter(mtcars, cyl != 4), .by = cyl, avg_disp = mean(disp))
 ```
 
 ## Exploring the metadata
