@@ -171,7 +171,7 @@ bplapply(
 )
 ```
 
-Many other Bioconductor functions have `BPPARAM` arguments. Whenever you see
+Many Bioconductor functions have `BPPARAM` arguments. Whenever you see
 that, you can set it to your preferred parameterization (`param` in the example
 above) to enable parallelization.
 
@@ -245,80 +245,77 @@ You can see that although they're pretty close, there's some disagreement.
 
 [Singular value decomposition](https://www.huber.embl.de/msmb/07-chap.html#singular-value-decomposition) (SVD) is the algorithm underlying PCA. The default `base::svd()`
 function performs an exact SVD that is not performant for large datasets.
-Instead, we use fast approximate methods from the `r CRANpkg("irlba")` and `r
-CRANpkg("rsvd")` packages, conveniently wrapped into the `r
-Biocpkg("BiocSingular")` package for ease of use and package development.
-Specifically, we can change the SVD algorithm used in any of these functions by
-simply specifying an alternative value for the `BSPARAM` argument.
+
+Under the hood, `scrapper` uses an algorithm called "Implicitly Restarted
+Lanczos Bidiagonalization Algorithm" (IRLBA). This yields a fast and accurate
+approximation for a set number of PC embeddings.
+
+For the sake of demonstration, we'll compare `base::svd()` against `runPca()` on
+the first 500 HVGs. We convert the log-counts to a standard dense matrix first
 
 ```{r fast-svd}
-library(scater)
-library(BiocSingular)
+hvg_subset = rowData(sce)$hvg |> which() |> head(500)
 
-# As the name suggests, it is random, so we need to set the seed.
-set.seed(101000)
+input_mat <- logcounts(sce)[hvg_subset,] |>
+  as.matrix() |> 
+  scale(center = TRUE, scale = FALSE)
 
-r.out <- runPCA(sce, ncomponents = 20, BSPARAM = RandomParam())
+system.time({s1 <- svd(t(input_mat))})
 
-str(reducedDim(r.out, "PCA"))
-
-set.seed(101001)
-
-i.out <- runPCA(sce, ncomponents = 20, BSPARAM = IrlbaParam())
-
-str(reducedDim(i.out, "PCA"))
+system.time({i1 <- runPca(input_mat)})
 ```
 
-Both IRLBA and randomized SVD (RSVD) are much faster than the exact SVD and
-usually yield only a negligible loss of accuracy. This motivates their default
-use in many `r Biocpkg("scran")` and `r Biocpkg("scater")` functions, at the
-cost of requiring users to set the seed to guarantee reproducibility. IRLBA can
-occasionally fail to converge and require more iterations (passed via `maxit=`
-in `IrlbaParam()`), while RSVD involves an explicit trade-off between accuracy
-and speed based on its oversampling parameter (`p=`) and number of power
-iterations (`q=`). We tend to prefer IRLBA as its default behavior is more
-accurate, though RSVD is much faster for file-backed matrices.
+Beyond IRLBA, another algorithm called randomized SVD (RSVD) goes further in the
+"more speed, more approximation error" direction which can be beneficial for
+larger datasets. See `r Biocpkg("BiocSingular")` for more detail.
 
 :::: challenge
 
-The uncertainty from approximation error is sometimes aggravating. "Why can't my
-computer just give me the right answer?" One way to alleviate this feeling is to
-quantify the approximation error on a small test set like the sce we have here.
-Using the `ExactParam()` class, visualize the error in PC1 coordinates compared
-to the RSVD results.
+The uncertainty from approximation error is sometimes aggravating. "How do I
+know the approximation error isn't throwing me off?" One way to alleviate this
+feeling is to quantify the approximation error on a small test set. Compare PC1
+of the IRLBA and exact embeddings.
+
+::: hint
+While you can get the PC embeddings from the SVD results with some simple linear
+algebra, you may find it easier to get them using the function `prcomp()` which
+provides them pre-computed in a component called `x`.
+:::
 
 ::: solution
-This code block calculates the exact PCA coordinates. Another thing to note: PC vectors are only identified up to a sign flip. We can see that the RSVD PC1 vector points in the 
-```{r}
-set.seed(123)
-
-e.out <- runPCA(sce, ncomponents = 20, BSPARAM = ExactParam())
-
-str(reducedDim(e.out, "PCA"))
-
-reducedDim(e.out, "PCA")[1:5,1:3]
-
-reducedDim(r.out, "PCA")[1:5,1:3]
-```
-
-For the sake of visualizing the error we can just flip the PC1 coordinates:
 
 ```{r}
-reducedDim(r.out, "PCA") = -1 * reducedDim(r.out, "PCA")
-```
+library(ggplot2)
 
-From there we can visualize the error with a histogram:
+exact <- prcomp(t(input_mat))
 
-```{r}
-error <- reducedDim(r.out, "PCA")[,"PC1"] - 
-         reducedDim(e.out, "PCA")[,"PC1"]
+test_diff <- i1$components[1,1] - exact$x[1,1]
 
-data.frame(approx_error = error) |> 
-  ggplot(aes(approx_error)) + 
+if (test_diff > .1) {
+  i1$components  <- -1 * i1$components
+}
+
+comp_df <- data.frame(
+  exact = exact$x[,"PC1"],
+  irlba = i1$components[1,]
+)
+
+comp_df$diff = comp_df$exact - comp_df$irlba
+
+ggplot(comp_df, aes(exact, irlba)) + 
+  geom_abline(lty = 2, color = 'grey') + 
+  geom_point()
+
+ggplot(comp_df, aes(diff)) + 
   geom_histogram()
 ```
 
-It's almost never more than .001 in this case. 
+Note that we check a test point of both results to see if they're close, and if
+not multiply one set of embeddings by -1. This is because the signs of PC
+embeddings are not uniquely identifiable in general, so different algorithms can
+sometimes come with flipped signs.
+
+You can see they're very close. 
 
 :::
 
