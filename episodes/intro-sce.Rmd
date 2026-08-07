@@ -208,8 +208,9 @@ Here, we add a column of named `conservation` that could represent an evolutiona
 rowData(sce)$conservation <- rnorm(nrow(sce))
 ```
 
-These are just random numbers for demonstration purposes, but in practice storing gene-wise data in the `rowData` is convenient
-and simplifies data management.
+These are just random numbers for demonstration purposes, but in practice
+storing gene-wise data in the `rowData` is convenient and simplifies data
+management.
 
 ::: 
 
@@ -281,6 +282,8 @@ sce6 <- WTChimeraData(samples = 6)
 
 (combined_sce <- cbind(sce, sce6))
 ```
+
+Note that column binding two objects might be nonsensical for some slots e.g. PCA embeddings.
 
 :::
 

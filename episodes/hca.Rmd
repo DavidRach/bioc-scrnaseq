@@ -106,7 +106,7 @@ small sample database, but for larger tables with huge numbers of rows, it's
 generally better to run a filtered query on the connection and *then* collect
 the much smaller result.
 
-Get a view of the first 10 columns in the metadata with `glimpse()`
+Get a view of the first 10 columns in the metadata with `glimpse()`:
 
 ```{r}
 metadata |>
