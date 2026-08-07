@@ -406,10 +406,10 @@ function and then directly used in compatible Python-based analysis frameworks.
 
 #### Exercise 1: Out of memory representation
 
-Write the counts matrix of the wild-type chimera mouse gastrulation dataset to
-an HDF5 file. Create another counts matrix that reads the data from the HDF5
-file. Compare memory usage of holding the entire matrix in memory as opposed to
-holding the data out of memory.
+Write the counts matrix of one sample from the wild-type chimera mouse
+gastrulation dataset to an HDF5 file. Create another counts matrix that reads
+the data from the HDF5 file. Compare memory usage of holding the entire matrix
+in memory as opposed to holding the data out of memory.
 
 :::::::::::::: hint
 
@@ -424,7 +424,7 @@ function for writing to HDF5 from the `r Biocpkg("HDF5Array")` package.
 
 wt_out <- tempfile(fileext = ".h5")
 
-wt_counts <- counts(WTChimeraData())
+wt_counts <- counts(WTChimeraData(samples = 5))
 
 writeHDF5Array(wt_counts,
                name = "wt_counts",
@@ -445,37 +445,21 @@ object.size(oom_wt)
 
 #### Exercise 2: Parallelization
 
-Perform a PCA analysis of the  wild-type chimera mouse gastrulation
-dataset using a multicore backend for parallel computation. Compare the runtime
-of performing the PCA either in serial execution mode, in multicore execution
-mode with 2 workers, and in multicore execution mode with 3 workers.
-
-:::::::::::::: hint
-
-Use the function `system.time` to obtain the runtime of each job.
-
-:::::::::::::::::::::::
+Compare the runtime of `runPca()` when called with different numbers of threads
+and compare the run time. Do you reach a limit where additional threads starts
+to hurt performance?
 
 :::::::::::::: solution
 
 ```{r eval=FALSE}
 
-sce.brain <- logNormCounts(sce.brain)
+system.time({runPca(logcounts(sce))})
 
-system.time({i.out <- runPCA(sce.brain, 
-                             ncomponents = 20, 
-                             BSPARAM = ExactParam(),
-                             BPPARAM = SerialParam())})
+system.time({runPca(logcounts(sce), num.threads = 2)})
 
-system.time({i.out <- runPCA(sce.brain, 
-                             ncomponents = 20, 
-                             BSPARAM = ExactParam(),
-                             BPPARAM = MulticoreParam(workers = 2))})
+# Try others as your system allows
+# system.time({runPca(logcounts(sce), num.threads = N)}) 
 
-system.time({i.out <- runPCA(sce.brain, 
-                             ncomponents = 20, 
-                             BSPARAM = ExactParam(),
-                             BPPARAM = MulticoreParam(workers = 3))})
 
 ```
 
