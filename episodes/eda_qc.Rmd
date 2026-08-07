@@ -48,7 +48,6 @@ library(MouseGastrulationData)
 library(DropletUtils)
 library(ggplot2)
 library(EnsDb.Mmusculus.v79)
-library(scuttle)
 library(scater)
 library(scrapper)
 library(scDblFinder)
@@ -317,7 +316,7 @@ Now we can use the size factors to normalize the counts:
 (sce <- normalizeRnaCounts.se(sce, size.factors = lib.sf))
 ```
 
-There are more thoughtful ways to estimate cell-wise normalization factors (see `scuttle::pooledSizeFactors()`), but the broader single cell field has more or less decided to ignore normalization bias and use library size factors with a "meh, good enough" attitude. A statistically rigorous handling of this detail would require integrating over the uncertainty in the normalizing factor ([as is sometimes done for microbiome data](https://doi.org/10.1186/s13059-025-03609-3)), which is generally regarded as too inexpedient for single-cell data. 
+There are more thoughtful ways to estimate cell-wise normalization factors (see `scuttle::pooledSizeFactors()`), but the broader single cell field has more or less decided to ignore normalization bias and use library size factors with a "meh, good enough" attitude. A statistically rigorous handling of this detail would require integrating over the uncertainty in the normalizing factor ([as is sometimes done for microbiome data](https://doi.org/10.1186/s13059-025-03609-3)), but this is generally regarded as too inexpedient for single-cell data. 
 
 <!-- TODO: add a new challenge here to replace the old one -->
 
@@ -713,10 +712,10 @@ No. Mathematically, this would require the data to fall on a two-dimensional pla
 ::::::::::::::::::::::::::::::::::::: keypoints 
 
 - Empty droplets, i.e. droplets that do not contain intact cells and that capture only ambient or background RNA, should be removed prior to an analysis. The `emptyDrops` function from the [DropletUtils](https://bioconductor.org/packages/DropletUtils) package can be used to identify empty droplets. 
-- Doublets, i.e. instances where two cells are captured in the same droplet, should also be removed prior to an analysis. The `computeDoubletDensity` and `doubletThresholding` functions from the [scDblFinder](https://bioconductor.org/packages/scDblFinder) package can be used to identify doublets. 
+- Doublets, i.e. instances where two cells are captured in the same droplet, should also be removed prior to an analysis. The `scDblFinder()` function from the [scDblFinder](https://bioconductor.org/packages/scDblFinder) package can be used to identify doublets. 
 - Quality control (QC) uses metrics such as library size, number of expressed features, and mitochondrial read proportion, based on which low-quality cells can be detected and filtered out. Diagnostic plots of the chosen QC metrics are important to identify possible issues. 
 - Normalization is required to account for systematic differences in sequencing coverage between libraries and to make measurements comparable between cells. Library size normalization is the most commonly used normalization strategy, and involves dividing all counts for each cell by a cell-specific scaling factor.
-- Feature selection aims at selecting genes that contain useful information about the biology of the system while removing genes that contain only random noise. Calculate per-gene variance with the `modelGeneVar` function and select highly-variable genes with `getTopHVGs`.
+- Feature selection aims at selecting genes that contain useful information about the biology of the system while removing genes that contain only random noise. Calculate per-gene variance with the `modelGeneVariances()` function and select highly-variable genes with `chooseRnaHvgs.se()`.
 - Dimensionality reduction aims at reducing the computational work and at obtaining less noisy and more interpretable results. PCA is a simple and effective linear dimensionality reduction technique that provides interpretable results for further analysis such as clustering of cells. Non-linear approaches such as UMAP and t-SNE can be useful for visualization, but the resulting representations should not be used in downstream analysis.  
 
 ::::::::::::::::::::::::::::::::::::::::::::::::

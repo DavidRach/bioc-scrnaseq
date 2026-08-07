@@ -2233,42 +2233,6 @@
       "Maintainer": "Dirk Eddelbuettel <edd@debian.org>",
       "Repository": "CRAN"
     },
-    "ResidualMatrix": {
-      "Package": "ResidualMatrix",
-      "Version": "1.22.0",
-      "Source": "Bioconductor",
-      "Date": "2025-04-08",
-      "Title": "Creating a DelayedMatrix of Regression Residuals",
-      "Authors@R": "person(\"Aaron\", \"Lun\", role=c(\"aut\", \"cre\", \"cph\"), email=\"infinite.monkeys.with.keyboards@gmail.com\")",
-      "Imports": [
-        "methods",
-        "Matrix",
-        "S4Vectors",
-        "DelayedArray"
-      ],
-      "Suggests": [
-        "testthat",
-        "BiocStyle",
-        "knitr",
-        "rmarkdown",
-        "BiocSingular"
-      ],
-      "biocViews": "Software, DataRepresentation, Regression, BatchEffect, ExperimentalDesign",
-      "Description": "Provides delayed computation of a matrix of residuals after fitting a linear model to each column of an input matrix. Also supports partial computation of residuals where selected factors are to be preserved in the output matrix. Implements a number of efficient methods for operating on the delayed matrix of residuals, most notably matrix multiplication  and calculation of row/column sums or means.",
-      "License": "GPL-3",
-      "VignetteBuilder": "knitr",
-      "RoxygenNote": "7.3.1",
-      "BugReports": "https://github.com/LTLA/ResidualMatrix/issues",
-      "URL": "https://github.com/LTLA/ResidualMatrix",
-      "git_url": "https://git.bioconductor.org/packages/ResidualMatrix",
-      "git_branch": "RELEASE_3_23",
-      "git_last_commit": "bbbe857",
-      "git_last_commit_date": "2026-04-28",
-      "Repository": "Bioconductor 3.23",
-      "NeedsCompilation": "no",
-      "Author": "Aaron Lun [aut, cre, cph]",
-      "Maintainer": "Aaron Lun <infinite.monkeys.with.keyboards@gmail.com>"
-    },
     "Rhdf5lib": {
       "Package": "Rhdf5lib",
       "Version": "2.0.0",
@@ -3361,65 +3325,6 @@
       "Repository": "Bioconductor 3.23",
       "NeedsCompilation": "no",
       "Author": "Aaron Lun [aut, cre, cph], Vince Carey [ctb]",
-      "Maintainer": "Aaron Lun <infinite.monkeys.with.keyboards@gmail.com>"
-    },
-    "batchelor": {
-      "Package": "batchelor",
-      "Version": "1.28.0",
-      "Source": "Bioconductor",
-      "Date": "2026-04-09",
-      "Title": "Single-Cell Batch Correction Methods",
-      "Authors@R": "c(person(\"Aaron\", \"Lun\", role = c(\"aut\", \"cre\"), email = \"infinite.monkeys.with.keyboards@gmail.com\"), person(\"Laleh\", \"Haghverdi\", role=\"ctb\"))",
-      "Depends": [
-        "SingleCellExperiment"
-      ],
-      "Imports": [
-        "SummarizedExperiment",
-        "S4Vectors",
-        "BiocGenerics",
-        "Rcpp",
-        "stats",
-        "methods",
-        "utils",
-        "igraph",
-        "BiocNeighbors",
-        "BiocSingular",
-        "Matrix",
-        "SparseArray",
-        "DelayedArray (>= 0.31.5)",
-        "DelayedMatrixStats",
-        "BiocParallel",
-        "scuttle",
-        "ResidualMatrix",
-        "ScaledMatrix",
-        "beachmat"
-      ],
-      "Suggests": [
-        "testthat",
-        "BiocStyle",
-        "knitr",
-        "rmarkdown",
-        "scran",
-        "scater",
-        "bluster",
-        "scRNAseq"
-      ],
-      "biocViews": "Sequencing, RNASeq, Software, GeneExpression, Transcriptomics, SingleCell, BatchEffect, Normalization",
-      "LinkingTo": [
-        "Rcpp"
-      ],
-      "Description": "Implements a variety of methods for batch correction of single-cell (RNA sequencing) data.  This includes methods based on detecting mutually nearest neighbors, as well as several efficient variants of linear regression of the log-expression values. Functions are also provided to perform global rescaling to remove differences in depth between batches, and to perform a principal components analysis that is robust to differences in the numbers of cells across batches.",
-      "License": "GPL-3",
-      "NeedsCompilation": "yes",
-      "VignetteBuilder": "knitr",
-      "SystemRequirements": "C++11",
-      "RoxygenNote": "7.3.2",
-      "git_url": "https://git.bioconductor.org/packages/batchelor",
-      "git_branch": "RELEASE_3_23",
-      "git_last_commit": "5823437",
-      "git_last_commit_date": "2026-04-28",
-      "Repository": "Bioconductor 3.23",
-      "Author": "Aaron Lun [aut, cre], Laleh Haghverdi [ctb]",
       "Maintainer": "Aaron Lun <infinite.monkeys.with.keyboards@gmail.com>"
     },
     "beachmat": {
