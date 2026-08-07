@@ -47,7 +47,7 @@ library(batchelor)
 library(edgeR)
 library(scater)
 library(ggplot2)
-library(scran)
+library(scrapper)
 library(pheatmap)
 library(scuttle)
 
@@ -78,15 +78,13 @@ sce <- sce[,idx]
 We now normalize the data, run some dimensionality reduction steps, and visualize the data in a tSNE plot. In this case we have many different cell types, so we define a custom palette with many visually distinct colors (adapted from the `polychrome` palette in the [`pals` package](https://cran.r-project.org/web/packages/pals/vignettes/pals_examples.html)). 
 
 ```{r}
-sce <- logNormCounts(sce)
+sce <- sce |> 
+  normalizeRnaCounts.se() |>
+  chooseRnaHvgs.se()
 
-dec <- modelGeneVar(sce, block = sce$sample)
-
-chosen.hvgs <- dec$bio > 0
-
-sce <- runPCA(sce, subset_row = chosen.hvgs, ntop = 1000)
-
-sce <- runTSNE(sce, dimred = "PCA")
+sce <- sce |> 
+  runPca.se(features = rowData(sce)$hvg) |> 
+  runTsne.se()
 
 sce$sample <- as.factor(sce$sample)
 
@@ -129,21 +127,13 @@ in the `batchelor` package, using the `sample` column as the batch variable.
 ```{r}
 set.seed(10102)
 
-merged <- correctExperiments(
-    sce, 
-    batch = sce$sample, 
-    subset.row = chosen.hvgs,
-    PARAM = FastMnnParam(
-        merge.order = list(
-            list(1,3,5), # WT (3 replicates)
-            list(2,4,6)  # td-Tomato (3 replicates)
-        )
-    )
-)
+merged <- correctMnn.se(sce,
+                        block = sce$sample)
 
-merged <- runTSNE(merged, dimred = "corrected")
+merged <- runTsne.se(merged, 
+                     reddim.type = "MNN")
 
-plotTSNE(merged, colour_by = "batch")
+plotTSNE(merged, colour_by = "sample")
 ```
 
 We can also see that when coloring cells by cell type, the cell types are now largely confined to individual clusters:
@@ -153,7 +143,6 @@ plotTSNE(merged, colour_by = "celltype.mapped") +
     scale_color_manual(values = color_vec) +
     theme(legend.position = "bottom")
 ```
-
 
 Once we have removed the sample effect, we can proceed with the differential 
 expression (DE) analysis.
