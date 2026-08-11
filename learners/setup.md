@@ -17,12 +17,11 @@ double-clicking the icon and enter these commands:
 ```r
 install.packages(c("BiocManager"))
 
-BiocManager::install(c("AUCell", "batchelor", "BiocStyle", 
-                       "MangiolaLaboratory/cellNexus", "DropletUtils", "duckdb",
-                       "EnsDb.Mmusculus.v79", "MouseGastrulationData",
-                       "scDblFinder", "scrapper",  "SingleR", 
-                       "TENxBrainData", "zellkonverter"),
-                       Ncpus = 4)
+BiocManager::install(c("AUCell", "BiocStyle", "MangiolaLaboratory/cellNexus",
+                       "DropletUtils", "EnsDb.Mmusculus.v79",
+                       "MouseGastrulationData", "scDblFinder", "scrapper",
+                       "SingleR", "TENxBrainData", "zellkonverter"),
+                     Ncpus = 4)
 ```
 
 You can adjust `Ncpus` as needed for your machine.
