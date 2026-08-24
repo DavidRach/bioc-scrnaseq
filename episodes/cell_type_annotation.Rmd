@@ -36,7 +36,7 @@ library(MouseGastrulationData)
 library(SingleR)
 library(bluster)
 library(scater)
-library(scran)
+library(scrapper)
 library(pheatmap)
 library(GSEABase)
 ```
@@ -66,9 +66,13 @@ sce <- sce[,ind]
 The SCE object needs to contain log-normalized expression counts as well as PCA coordinates in the reduced dimensions, so we compute those here: 
 
 ```{r preproc, warning = FALSE}
-sce <- logNormCounts(sce)
+sce <- sce |> 
+  normalizeRnaCounts.se() |> 
+  chooseRnaHvgs.se()
 
-sce <- runPCA(sce)
+sce <- sce |> 
+  runPca.se(features = rowData(sce)$hvg)
+
 ```
 
 ## Clustering
@@ -93,44 +97,44 @@ connected to cells in the same community than they are to cells of different
 communities. Each community represents a cluster that we can use for downstream
 interpretation.
 
-Here, we use the `clusterCells()` function from the
-[scran](https://bioconductor.org/packages/scran) package to perform
+Here, we use the `clusterGraph.se()` function from the
+[scrapper](https://bioconductor.org/packages/release/bioc/html/scrapper.html) package to perform
 graph-based clustering using the [Louvain
 algorithm](https://doi.org/10.1088/1742-5468/2008/10/P10008) for
 community detection. All calculations are performed using the top PCs to
-take advantage of data compression and denoising. This function returns
-a vector containing cluster assignments for each cell in our
-`SingleCellExperiment` object. We use the `colLabels()` function to assign the
-cluster labels as a factor in the column data.
+take advantage of data compression and denoising. This function adds a "clusters" column to the `colData`.
+
 
 ```{r cluster}
-colLabels(sce) <- clusterCells(sce, use.dimred = "PCA",
-                               BLUSPARAM = NNGraphParam(cluster.fun = "louvain"))
+sce <- clusterGraph.se(sce)
 
-table(colLabels(sce))
+table(sce$clusters)
 ```
-You can see we ended up with `r length(table(colLabels(sce)))` clusters of varying sizes.
+
+<!-- scrapper::clusterGraph.se is actually about 3x slower than scran::clusterCells which calls bluster::clusterRows -->
+
+You can see we ended up with `r length(levels(sce$clusters))` clusters of varying sizes.
 
 We can now overlay the cluster labels as color on a UMAP plot:
 
 ```{r cluster-viz}
-sce <- runUMAP(sce, dimred = "PCA")
+sce <- runUmap.se(sce)
 
-plotReducedDim(sce, "UMAP", color_by = "label")
+plotReducedDim(sce, "UMAP", color_by = "clusters")
 ```
 
 :::: challenge
 
-Our clusters look semi-reasonable, but what if we wanted to make them less granular? Look at the help documentation for `?clusterCells` and `?NNGraphParam` to find out what we'd need to change to get fewer, larger clusters.
+Our clusters look semi-reasonable, but what if we wanted to make them less granular? Look at the help documentation for `?clusterGraph.se` and `?buildSnnGraph` to find out what we'd need to change to get fewer, larger clusters.
 
 ::: solution
 
-We see in the help documentation for `?clusterCells` that all of the clustering algorithm details are handled through the `BLUSPARAM` argument, which needs to provide a `BlusterParam` object (of which `NNGraphParam` is a sub-class). Each type of clustering algorithm will have some sort of hyper-parameter that controls the granularity of the output clusters. Looking at `?NNGraphParam` specifically, we see an argument called `k` which is described as "An integer scalar specifying the number of nearest neighbors to consider during graph construction." If the clustering process has to connect larger sets of neighbors, the graph will tend to be cut into larger groups, resulting in less granular clusters. Try the two code blocks above once more with `k = 30`. Given their visual differences, do you think one set of clusters is "right" and the other is "wrong"?
+We see in the help documentation for `?clusterGraph.se` an argument called `num.neighbors`. Each type of clustering algorithm will have some sort of hyper-parameter that controls the granularity of the output clusters. If the clustering process has to connect larger sets of neighbors, the graph will tend to be cut into larger groups, resulting in less granular clusters. Create a new set of clusters with `k = 30`. Given their visual differences, do you think one set of clusters is "right" and the other is "wrong"?
+
 
 ```{r}
-sce$clust2 <- clusterCells(sce, use.dimred = "PCA",
-                           BLUSPARAM = NNGraphParam(cluster.fun = "louvain",
-                                                    k = 30))
+sce <- clusterGraph.se(sce, num.neighbors = 30,
+                       output.name = "clust2")
 
 plotReducedDim(sce, "UMAP", color_by = "clust2")
 ```
@@ -160,7 +164,7 @@ compared to another cluster.
 ```{r marker-detect}
 rownames(sce) <- rowData(sce)$SYMBOL
 
-markers <- scoreMarkers(sce)
+markers <- scoreMarkers.se(sce, groups = sce$clusters)
 
 markers
 ```
@@ -172,15 +176,15 @@ the separation of that cluster from all other clusters.
 Here, we inspect the ranked marker gene list for the first cluster.
 
 ```{r marker-clust1}
-markers[[1]]
+head(markers[[1]], 3)
 ```
 
 Each column contains summary statistics for each gene in the given cluster.
 These are usually the mean/median/min/max of statistics like Cohen's *d* and AUC
 when comparing this cluster (cluster 1 in this case) to all other clusters.
-`mean.AUC` is usually the most important to check. AUC is the probability that a
+`auc.mean` is usually the most important to check. AUC is the probability that a
 randomly selected cell in cluster *A* has a greater expression of gene
-*X* than a randomly selected cell in cluster *B*. You can set `full.stats=TRUE` if you'd like the marker data frames to retain list columns containing each statistic for each pairwise comparison.
+*X* than a randomly selected cell in cluster *B*. 
 
 We can then inspect the top marker genes for the first cluster using the
 `plotExpression` function from the
@@ -189,18 +193,17 @@ We can then inspect the top marker genes for the first cluster using the
 ```{r plot-markers, fig.width = 10, fig.height = 10}
 c1_markers <- markers[[1]]
 
-ord <- order(c1_markers$mean.AUC, 
-             decreasing = TRUE)
+ord <- order(-c1_markers$auc.mean)
 
 top.markers <- head(rownames(c1_markers[ord,]))
 
 plotExpression(sce, 
                features = top.markers, 
-               x        = "label", 
-               color_by = "label")
+               x        = "clusters",
+               color_by = "clusters")
 ```
 
-Clearly, not every marker gene distinguishes cluster 1 from every other cluster. However, with a combination of multiple marker genes it's possible to clearly identify gene patterns that are unique to cluster 1. It's sort of like the 20 questions game - with answers to the right questions about a cell (e.g. "Do you highly express Ptn?"), you can clearly identify what cluster it falls in.
+Clearly, not every marker gene distinguishes cluster 1 from every other cluster. However, with a combination of multiple marker genes it's possible to clearly identify gene patterns that are unique to cluster 1. It's sort of like the 20 questions game - with answers to the right questions about a cell (e.g. "Do you highly express Ptn? Sox2?"), you can clearly identify what cluster it falls in.
 
 :::: challenge
 
@@ -208,10 +211,10 @@ Looking at the last plot, what clusters are most difficult to distinguish from c
 
 ::: solution
 
-You can see that at least among the top markers, cluster 6 (pale green) tends to have the least separation from cluster 1. 
+You can see that at least among the top markers, cluster 9 (purple) tends to have the least separation from cluster 1. 
 
 ```{r}
-plotReducedDim(sce, "UMAP", color_by = "label")
+plotReducedDim(sce, "UMAP", color_by = "clusters")
 ```
 
 Looking at the UMAP again, we can see that the marker gene overlap of clusters 1 and 6 makes sense. They're right next to each other on the UMAP. They're probably closely related cell types, and a less granular clustering would probably lump them together.
@@ -288,12 +291,12 @@ ref <- EmbryoAtlasData(samples = 29)
 ref
 ```
 
-In order to reduce the computational load, we subsample the dataset to 1,000 cells.
+In order to reduce the computational load, we subsample the dataset to 2,000 cells.
 
 ```{r}
 set.seed(123)
 
-ind <- sample(ncol(ref), 1000)
+ind <- sample(ncol(ref), 2000)
 
 ref <- ref[,ind]
 ```
@@ -303,13 +306,13 @@ You can see we have an assortment of different cell types in the reference (with
 ```{r ref-celltypes}
 tab <- sort(table(ref$celltype), decreasing = TRUE)
 
-tab
+data.frame(tab)
 ```
 
 We need the normalized log counts, so we add those on: 
 
 ```{r ref-preproc}
-ref <- logNormCounts(ref)
+ref <- normalizeRnaCounts.se(ref)
 ```
 
 Some cleaning - remove cells of the reference dataset for which the cell
@@ -321,8 +324,7 @@ nna <- !is.na(ref$celltype)
 ref <- ref[,nna]
 ```
 
-Also remove cell types of very low abundance (here less than 10 cells)
-to remove noise prior to subsequent annotation tasks.
+Also remove very rare cell types (fewer than 10 examples) to avoid allocating cells to a poorly characterized type.
 
 ```{r low-abu-ct}
 abu.ct <- names(tab)[tab >= 10]
@@ -384,9 +386,11 @@ type, indicating that the clustering represents finer subdivisions within these
 cell types.
 
 ```{r, fig.width = 10, fig.height = 10}
-tab <- table(anno = res$pruned.labels, cluster = colLabels(sce))
+tab <- table(anno = res$pruned.labels, 
+             cluster = sce$clusters)
 
-pheatmap(log2(tab + 10), color = colorRampPalette(c("white", "blue"))(101))
+pheatmap(log1p(tab), 
+         color = hcl.colors(100))
 ```
 
 As it so happens, we are in the fortunate position where our test
@@ -398,7 +402,8 @@ experts.
 ```{r anno-vs-preanno, fig.width = 10, fig.height = 10}
 tab <- table(res$pruned.labels, sce$celltype.mapped)
 
-pheatmap(log2(tab + 10), color = colorRampPalette(c("white", "blue"))(101))
+pheatmap(log1p(tab), 
+         color = hcl.colors(100))
 ```
 
 :::: challenge
@@ -414,42 +419,30 @@ sce$SingleR_label = res$pruned.labels
 :::
 ::::
 
-### Assigning cell labels from gene sets
+### Assigning cell labels from marker gene sets
 
 A related strategy is to explicitly identify sets of marker genes that
 are highly expressed in each individual cell. This does not require
 matching of individual cells to the expression values of the reference
 dataset, which is faster and more convenient when only the identities of
-the markers are available. We demonstrate this approach using cell type
-markers derived from the mouse embryo atlas dataset.
+the markers are available. 
+
+It's common to use expert-curated lists of marker genes derived from the
+literature and/or experimental experience. However for the sake of
+demonstration, in this case we'll use cell type markers derived empirically from
+the mouse embryo atlas dataset.
 
 ```{r atlas-markers}
-wilcox.z <- pairwiseWilcox(ref, ref$celltype, lfc = 1, direction = "up")
-
-markers.z <- getTopMarkers(wilcox.z$statistics, wilcox.z$pairs, 
-                           pairwise = FALSE, n = 50)
-
-lengths(markers.z)
+mrkrs <- scoreMarkers.se(ref, groups = ref$celltype)
 ```
 
-<!--- 
+This gives a list of marker statistics for each cell type. Let's look at the Erythroid3 markers:
 
-This version with scoreMarkers() produces worse looking diagnostics, so let's leave it with the pairwise Wilcox version.
-```{r atlas-markers-sM}
+```{r}
+mrkrs[["Erythroid3"]][,c("mean", "auc.mean")]
+```
 
-ref_markers <- scoreMarkers(ref, groups = ref$celltype, lfc = 1)
-
-get_top_markers <- function(marker_df, n = 100) {
-  ord <- order(marker_df$mean.AUC, decreasing = TRUE)
-  
-  rownames(marker_df[ord,])[1:n]
-}
-
-markers.z <- lapply(ref_markers, get_top_markers)
-
-``` 
-
--->
+The full table gives a large list of statistics for each gene describing how well distinguishes Erythroid3 cells from other cell types. The two selected here, mean expression and mean AUC, are important statistics to look at. They help you check that the gene is highly expressed in the cell type and can consistently discriminate the selected type from the others, respectively.
 
 Our test dataset will be as before the wild-type chimera dataset.
 
@@ -469,8 +462,16 @@ set, but involving only the top ranking genes by expression in each
 cell.
 
 ```{r create-gsets, message = FALSE}
-all.sets <- lapply(names(markers.z), 
-                   function(x) GeneSet(markers.z[[x]], setName = x))
+get_top_n <- function(mrk_df, ntop = 100) {
+  o = order(mrk_df$auc.median, decreasing = TRUE)
+  
+  rownames(mrk_df[head(o, ntop),])
+}
+
+all.sets <- lapply(names(mrkrs), 
+                   function(x) {
+                     GeneSet(get_top_n(mrkrs[[x]]), setName = x) 
+                   })
 
 all.sets <- GeneSetCollection(all.sets)
 
@@ -485,7 +486,7 @@ cell.aucs <- AUCell_calcAUC(all.sets, rankings)
 
 results <- t(assay(cell.aucs))
 
-head(results)
+head(results, 3)
 ```
 
 We assign cell type identity to each cell in the test dataset by taking
@@ -695,12 +696,12 @@ Remember, this is an exploratory diagnostic, not the final word! At this point i
 -   For manual annotation, cells are first clustered with unsupervised methods
     such as graph-based clustering followed by community detection algorithms such
     as Louvain or Leiden.
--   The `clusterCells` function from the `r Biocpkg("scran")` package provides different
-    algorithms that are commonly used for the clustering of scRNA-seq data.
+-   The `clusterGraph.se()` function from the `r Biocpkg("scrapper")` package 
+    enables graph clustering for scRNA-seq data.
 -   Once clusters have been obtained, cell type labels are then manually
     assigned to cell clusters by matching cluster-specific upregulated marker
     genes with prior knowledge of cell-type markers.
--   The `scoreMarkers` function from the `r Biocpkg("scran")` package 
+-   The `scoreMarkers.se()` function from the `r Biocpkg("scrapper")` package 
     package can be used to find candidate marker genes for clusters of cells by
     ranking differential expression between pairs of clusters.
 -   Computational annotation using published reference datasets or curated gene sets

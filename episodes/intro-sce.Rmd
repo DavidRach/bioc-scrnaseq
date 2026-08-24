@@ -31,7 +31,7 @@ options(digits = 3)
 
 ### Overview 
 
-Within the [R](https://www.r-project.org/) ecosystem, the [Bioconductor](https://bioconductor.org/) project provides tools for the analysis and comprehension of high-throughput genomics data.
+Within the [R ecosystem](https://www.r-project.org/), the [Bioconductor](https://bioconductor.org/) project provides tools for the analysis and comprehension of high-throughput genomics data.
 The scope of the project covers microarray data, various forms of sequencing (RNA-seq, ChIP-seq, bisulfite, genotyping, etc.), proteomics, flow cytometry and more.
 One of Bioconductor's main selling points is the use of common data structures to promote interoperability between packages, allowing code written by different people (from different organizations, in different countries) to work together seamlessly in complex analyses. 
 
@@ -134,12 +134,10 @@ There are two main disadvantages to this type of "from scratch" approach:
 
 Let's look at an example dataset. `WTChimeraData` comes from a study on mouse development [Pijuan-Sala et al.](https://www.nature.com/articles/s41586-019-0933-9). The study profiles the effect of a transcription factor TAL1 and its influence on mouse development. Because mutations in this gene can cause severe developmental issues, Tal1-/- cells (positive for tdTomato, a fluorescent protein) were injected into wild-type blastocysts (tdTomato-), forming chimeric embryos.
 
-We can assign one sample to a `SingleCellExperiment` object named `sce` like so:
+We can assign one sample to a `SingleCellExperiment` object named `sce` like so (we wrap the assignment in parentheses to assign and print in one step):
 
 ```{r, message = FALSE, warning=FALSE}
-sce <- WTChimeraData(samples = 5)
-
-sce
+(sce <- WTChimeraData(samples = 5))
 ```
 
 We can think of this (and other) class as a _container_, that contains several different pieces of data in so-called _slots_. SingleCellExperiment objects come with dedicated methods for _getting_ and _setting_ the data in their slots. 
@@ -155,9 +153,7 @@ Get the data for a different sample from  `WTChimeraData` (other than the fifth 
 Here we obtain the sixth sample and assign it to `sce6`:
 
 ```{r, message = FALSE, warning=FALSE, eval=FALSE}
-sce6 <- WTChimeraData(samples = 6)
-
-sce6
+(sce6 <- WTChimeraData(samples = 6))
 ```
 
 :::
@@ -212,8 +208,9 @@ Here, we add a column of named `conservation` that could represent an evolutiona
 rowData(sce)$conservation <- rnorm(nrow(sce))
 ```
 
-These are just random numbers for demonstration purposes, but in practice storing gene-wise data in the `rowData` is convenient
-and simplifies data management.
+These are just random numbers for demonstration purposes, but in practice
+storing gene-wise data in the `rowData` is convenient and simplifies data
+management.
 
 ::: 
 
@@ -283,10 +280,10 @@ sce  <- WTChimeraData(samples = 5)
 
 sce6 <- WTChimeraData(samples = 6)
 
-combined_sce <- cbind(sce, sce6)
-
-combined_sce
+(combined_sce <- cbind(sce, sce6))
 ```
+
+Note that column binding two objects might be nonsensical for some slots e.g. PCA embeddings.
 
 :::
 
